@@ -12,6 +12,7 @@ let latitud;
 let longitud;
 
 let estrellas = [];
+let constelaciones = [];
 
 
 // =====================================================
@@ -115,9 +116,11 @@ async function obtenerUbicacion() {
             }
 
 
-            // Cargar estrellas
+            // Cargar estrellas y constelaciones
 
             cargarEstrellas();
+
+            cargarConstelaciones();
 
 
             setTimeout(() => {
@@ -210,6 +213,48 @@ async function cargarEstrellas() {
 
         console.error(
             "Error cargando estrellas:",
+            error
+        );
+
+    }
+
+}
+
+
+// =====================================================
+// CARGAR CONSTELACIONES
+// =====================================================
+
+async function cargarConstelaciones() {
+
+    try {
+
+        const respuesta =
+            await fetch("constelaciones.json");
+
+        if (!respuesta.ok) {
+
+            throw new Error(
+                `HTTP ${respuesta.status}`
+            );
+
+        }
+
+        constelaciones =
+            await respuesta.json();
+
+        console.log(
+            "✨ Constelaciones cargadas:",
+            constelaciones.length
+        );
+
+        dibujarCielo();
+
+
+    } catch (error) {
+
+        console.error(
+            "Error cargando constelaciones:",
             error
         );
 
@@ -436,6 +481,163 @@ function estrellaAltAz(ra, dec, lst) {
 
 
 // =====================================================
+// PROYECTAR PUNTO (RA/Dec en grados → x, y en pantalla)
+// =====================================================
+// Devuelve null si el punto está fuera del horizonte
+// o fuera del campo de visión actual.
+
+function proyectarPunto(ra, dec, lst, centroX, centroY) {
+
+    const posicion =
+        estrellaAltAz(ra, dec, lst);
+
+
+    if (posicion.altitud <= 0) {
+        return null;
+    }
+
+
+    let diferenciaAzimut =
+        posicion.azimut -
+        heading;
+
+
+    while (diferenciaAzimut > 180) {
+        diferenciaAzimut -= 360;
+    }
+
+    while (diferenciaAzimut < -180) {
+        diferenciaAzimut += 360;
+    }
+
+
+    const diferenciaAltitud =
+        posicion.altitud -
+        pitch;
+
+
+    if (
+        Math.abs(diferenciaAzimut) >
+        FOV_HORIZONTAL / 2
+    ) {
+        return null;
+    }
+
+    if (
+        Math.abs(diferenciaAltitud) >
+        FOV_VERTICAL / 2
+    ) {
+        return null;
+    }
+
+
+    const x =
+        centroX +
+        (diferenciaAzimut / (FOV_HORIZONTAL / 2)) *
+        centroX;
+
+    const y =
+        centroY -
+        (diferenciaAltitud / (FOV_VERTICAL / 2)) *
+        centroY;
+
+
+    return { x, y };
+
+}
+
+
+// =====================================================
+// DIBUJAR CONSTELACIONES
+// =====================================================
+
+function dibujarConstelaciones(lst, centroX, centroY) {
+
+    ctx.strokeStyle =
+        "rgba(120, 170, 255, 0.55)";
+
+    ctx.lineWidth = 1;
+
+
+    for (const constelacion of constelaciones) {
+
+        // Para el nombre, usamos el primer punto visible que encontremos
+
+        let puntoParaNombre = null;
+
+
+        for (const linea of constelacion.lineas) {
+
+            ctx.beginPath();
+
+            let hayTrazo = false;
+
+
+            for (let i = 0; i < linea.length - 1; i++) {
+
+                const [ra1, dec1] = linea[i];
+                const [ra2, dec2] = linea[i + 1];
+
+                const p1 =
+                    proyectarPunto(ra1, dec1, lst, centroX, centroY);
+
+                const p2 =
+                    proyectarPunto(ra2, dec2, lst, centroX, centroY);
+
+
+                // Solo dibujamos el segmento si AMBOS extremos
+                // están dentro del campo de visión actual.
+
+                if (p1 && p2) {
+
+                    ctx.moveTo(p1.x, p1.y);
+                    ctx.lineTo(p2.x, p2.y);
+
+                    hayTrazo = true;
+
+
+                    if (!puntoParaNombre) {
+                        puntoParaNombre = p1;
+                    }
+
+                }
+
+            }
+
+
+            if (hayTrazo) {
+                ctx.stroke();
+            }
+
+        }
+
+
+        // =================================================
+        // NOMBRE DE LA CONSTELACIÓN
+        // =================================================
+
+        if (puntoParaNombre) {
+
+            ctx.font =
+                "13px Arial, sans-serif";
+
+            ctx.fillStyle =
+                "rgba(180, 210, 255, 0.75)";
+
+            ctx.fillText(
+                constelacion.nombre,
+                puntoParaNombre.x + 6,
+                puntoParaNombre.y - 6
+            );
+
+        }
+
+    }
+
+}
+
+
+// =====================================================
 // ACTIVAR SENSORES
 // =====================================================
 
@@ -656,6 +858,21 @@ function dibujarCielo() {
 
     const lst =
         tiempoSideral();
+
+
+    // =================================================
+    // CONSTELACIONES (debajo de las estrellas)
+    // =================================================
+
+    if (constelaciones.length > 0) {
+
+        dibujarConstelaciones(
+            lst,
+            centroX,
+            centroY
+        );
+
+    }
 
 
     // =================================================
