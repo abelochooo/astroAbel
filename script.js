@@ -47,15 +47,7 @@ function escribir() {
 
     }
 }
-escribir();
 
-setTimeout(() => {
-    if (ubicacionDiv) {
-        ubicacionDiv.style.display = "none";
-    }
-}, 3000);
-
-iniciarCamara();
 
 // =====================================================
 // OBTENER UBICACIÓN
@@ -935,10 +927,6 @@ function actualizarCieloDiaNoche() {
     }
 
 
-    // Si no existe fondoCielo, no hacemos nada.
-    // Esto evita errores si todavía no has añadido
-    // ese elemento al HTML.
-
     const fondo =
         document.getElementById(
             "fondoCielo"
@@ -953,20 +941,28 @@ function actualizarCieloDiaNoche() {
         new Date();
 
 
+    const observador =
+        new Astronomy.Observer(
+            latitud,
+            longitud,
+            0
+        );
+
+
     const sol =
         Astronomy.Equator(
             Astronomy.Body.Sun,
             ahora,
-            latitud,
-            longitud
+            observador,
+            true,
+            true
         );
 
 
     const horizonte =
         Astronomy.Horizon(
             ahora,
-            latitud,
-            longitud,
+            observador,
             sol.ra,
             sol.dec,
             "normal"
