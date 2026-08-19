@@ -9,6 +9,8 @@ const ctx = canvas.getContext("2d");
 const direccionElemento = document.getElementById("direccion");
 const altitudElemento = document.getElementById("altitud");
 
+const fondoCielo = document.getElementById("fondoCielo");
+
 let latitud;
 let longitud;
 
@@ -67,6 +69,7 @@ async function obtenerUbicacion() {
             console.log("Latitud:", latitud);
             console.log("Longitud:", longitud);
 
+
             try {
 
                 const resultado = await fetch(
@@ -91,11 +94,13 @@ async function obtenerUbicacion() {
                     municipality ||
                     "Ubicación desconocida";
 
+
                 ubicacion.textContent =
                     `${ciudad}, ${country}`;
 
                 ubi.textContent =
                     `${ciudad}, ${country}`;
+
 
             } catch (error) {
 
@@ -109,15 +114,32 @@ async function obtenerUbicacion() {
 
                 ubi.textContent =
                     "Ubicación obtenida";
+
             }
 
 
-            // Cargar las estrellas
+            // =================================================
+            // CARGAR ESTRELLAS
+            // =================================================
+
             cargarEstrellas();
 
 
-            // Mantener el efecto original:
-            // la pantalla desaparece después de 3 segundos.
+            // =================================================
+            // ACTUALIZAR CIELO
+            // =================================================
+
+            actualizarCieloDiaNoche();
+
+            setInterval(
+                actualizarCieloDiaNoche,
+                60000
+            );
+
+
+            // =================================================
+            // MANTENER EFECTO INICIAL
+            // =================================================
 
             setTimeout(() => {
 
@@ -238,22 +260,23 @@ function decAGrados(dec) {
         return null;
     }
 
+
     const partes = dec.match(
         /([+-])(\d+)°\s*(\d+)′\s*(\d+(?:\.\d+)?)″/
     );
 
-    if (!partes) {
 
-        // Intento alternativo por si algún registro
-        // utiliza símbolos diferentes.
+    if (!partes) {
 
         const alternativo = dec.match(
             /([+-])(\d+)[°º]\s*(\d+)[′']\s*(\d+(?:\.\d+)?)[″"]/
         );
 
+
         if (!alternativo) {
             return null;
         }
+
 
         const signo =
             alternativo[1] === "-" ? -1 : 1;
@@ -267,12 +290,15 @@ function decAGrados(dec) {
         const segundos =
             Number(alternativo[4]);
 
+
         return signo * (
             grados +
             minutos / 60 +
             segundos / 3600
         );
+
     }
+
 
     const signo =
         partes[1] === "-" ? -1 : 1;
@@ -285,6 +311,7 @@ function decAGrados(dec) {
 
     const segundos =
         Number(partes[4]);
+
 
     return signo * (
         grados +
@@ -301,14 +328,18 @@ function decAGrados(dec) {
 
 function tiempoSideral() {
 
-    const ahora = new Date();
+    const ahora =
+        new Date();
+
 
     const jd =
         ahora.getTime() / 86400000 +
         2440587.5;
 
+
     const T =
         (jd - 2451545.0) / 36525;
+
 
     let gmst =
         280.46061837 +
@@ -322,7 +353,6 @@ function tiempoSideral() {
         ((gmst % 360) + 360) % 360;
 
 
-    // Tiempo sideral local
     return (
         gmst + longitud
     ) % 360;
@@ -352,16 +382,16 @@ function estrellaAltAz(ra, dec) {
         latitud *
         Math.PI / 180;
 
+
     const decl =
         dec *
         Math.PI / 180;
+
 
     const hora =
         H *
         Math.PI / 180;
 
-
-    // ALTITUD
 
     const sinAlt =
         Math.sin(lat) *
@@ -380,8 +410,6 @@ function estrellaAltAz(ra, dec) {
             )
         );
 
-
-    // AZIMUT
 
     const az =
         Math.atan2(
@@ -418,6 +446,149 @@ function estrellaAltAz(ra, dec) {
 
 
 // =====================================================
+// CALCULAR DÍA / NOCHE
+// =====================================================
+
+function obtenerAltitudSol() {
+
+    if (
+        latitud === undefined ||
+        longitud === undefined
+    ) {
+
+        return null;
+
+    }
+
+
+    const ahora =
+        new Date();
+
+
+    const sol =
+        Astronomy.Equator(
+            Astronomy.Body.Sun,
+            ahora,
+            true,
+            true
+        );
+
+
+    const horizonte =
+        Astronomy.Horizon(
+            ahora,
+            latitud,
+            longitud,
+            sol.ra,
+            sol.dec,
+            "normal"
+        );
+
+
+    return horizonte.altitude;
+
+}
+
+
+// =====================================================
+// ACTUALIZAR CIELO DÍA/NOCHE
+// =====================================================
+
+function actualizarCieloDiaNoche() {
+
+    const altitudSol =
+        obtenerAltitudSol();
+
+
+    if (
+        altitudSol === null
+    ) {
+
+        return;
+
+    }
+
+
+    console.log(
+        "☀️ Altitud del Sol:",
+        altitudSol.toFixed(2),
+        "°"
+    );
+
+
+    if (!fondoCielo) {
+        return;
+    }
+
+
+    // =================================================
+    // DÍA
+    // =================================================
+
+    if (altitudSol >= 6) {
+
+        fondoCielo.style.backgroundImage =
+            'url("./cielo-dia.jpg")';
+
+        fondoCielo.style.opacity =
+            "1";
+
+    }
+
+
+    // =================================================
+    // NOCHE
+    // =================================================
+
+    else if (altitudSol <= -6) {
+
+        fondoCielo.style.backgroundImage =
+            'url("./cielo-noche.jpg")';
+
+        fondoCielo.style.opacity =
+            "1";
+
+    }
+
+
+    // =================================================
+    // AMANECER / ATARDECER
+    // =================================================
+
+    else {
+
+        const progreso =
+            (altitudSol + 6) / 12;
+
+
+        if (altitudSol >= 0) {
+
+            fondoCielo.style.backgroundImage =
+                'url("./cielo-dia.jpg")';
+
+        } else {
+
+            fondoCielo.style.backgroundImage =
+                'url("./cielo-noche.jpg")';
+
+        }
+
+
+        fondoCielo.style.opacity =
+            Math.max(
+                0.2,
+                Math.min(1, progreso)
+            );
+
+    }
+
+
+    dibujarCielo();
+
+}
+
+
+// =====================================================
 // ACTIVAR SENSORES
 // =====================================================
 
@@ -436,7 +607,6 @@ function activarSensores() {
                 Date.now();
 
 
-            // Evitar actualizar demasiadas veces
             if (
                 ahora -
                 ultimaActualizacion <
@@ -459,7 +629,6 @@ function activarSensores() {
             let nuevoHeading;
 
 
-            // iPhone / iPad
             if (
                 typeof event.webkitCompassHeading ===
                 "number"
@@ -470,7 +639,6 @@ function activarSensores() {
 
             }
 
-            // Android / otros navegadores
             else if (
                 typeof event.alpha ===
                 "number"
@@ -524,8 +692,6 @@ function activarSensores() {
             }
 
 
-            // Actualizar estrellas
-
             dibujarCielo();
 
         },
@@ -548,8 +714,6 @@ document
         async () => {
 
             try {
-
-                // iOS necesita permiso explícito
 
                 if (
                     typeof DeviceOrientationEvent !==
@@ -575,6 +739,7 @@ document
                         );
 
                         return;
+
                     }
 
                 }
@@ -582,8 +747,6 @@ document
 
                 activarSensores();
 
-
-                // Cambiar texto del botón
 
                 document.getElementById(
                     "activar"
@@ -636,7 +799,15 @@ function dibujarCielo() {
     );
 
 
-    // Fondo
+    // =================================================
+    // FONDO NEGRO DE SEGURIDAD
+    // =================================================
+
+    /*
+     * El fondo real lo proporciona #fondoCielo.
+     * Este color solamente aparece si la imagen
+     * todavía no ha cargado.
+     */
 
     ctx.fillStyle =
         "#02030a";
@@ -657,7 +828,51 @@ function dibujarCielo() {
 
 
     // =================================================
-    // TODAS LAS ESTRELLAS
+    // BRILLO DE LAS ESTRELLAS SEGÚN EL SOL
+    // =================================================
+
+    const altitudSol =
+        obtenerAltitudSol();
+
+
+    let brilloEstrellas = 1;
+
+
+    if (
+        altitudSol !== null
+    ) {
+
+        if (
+            altitudSol >= 6
+        ) {
+
+            brilloEstrellas =
+                0;
+
+        }
+
+        else if (
+            altitudSol <= -6
+        ) {
+
+            brilloEstrellas =
+                1;
+
+        }
+
+        else {
+
+            brilloEstrellas =
+                (-altitudSol + 6) /
+                12;
+
+        }
+
+    }
+
+
+    // =================================================
+    // ESTRELLAS
     // =================================================
 
     for (
@@ -670,6 +885,7 @@ function dibujarCielo() {
         ) {
 
             continue;
+
         }
 
 
@@ -677,6 +893,7 @@ function dibujarCielo() {
             raAGrados(
                 estrella.RA
             );
+
 
         const dec =
             decAGrados(
@@ -690,6 +907,7 @@ function dibujarCielo() {
         ) {
 
             continue;
+
         }
 
 
@@ -709,6 +927,7 @@ function dibujarCielo() {
         ) {
 
             continue;
+
         }
 
 
@@ -725,7 +944,8 @@ function dibujarCielo() {
             diferenciaAzimut > 180
         ) {
 
-            diferenciaAzimut -= 360;
+            diferenciaAzimut -=
+                360;
 
         }
 
@@ -734,7 +954,8 @@ function dibujarCielo() {
             diferenciaAzimut < -180
         ) {
 
-            diferenciaAzimut += 360;
+            diferenciaAzimut +=
+                360;
 
         }
 
@@ -742,14 +963,6 @@ function dibujarCielo() {
         // =================================================
         // DIFERENCIA VERTICAL
         // =================================================
-
-        /*
-         * Convertimos beta del teléfono a una
-         * referencia vertical aproximada.
-         *
-         * beta = 90 aproximadamente cuando el móvil
-         * está apuntando hacia arriba.
-         */
 
         const altitudTelefono =
             pitch;
@@ -789,7 +1002,7 @@ function dibujarCielo() {
 
 
         // =================================================
-        // POSICIÓN EN PANTALLA
+        // POSICIÓN
         // =================================================
 
         const x =
@@ -819,7 +1032,9 @@ function dibujarCielo() {
         // =================================================
 
         const magnitud =
-            Number(estrella.V);
+            Number(
+                estrella.V
+            );
 
 
         if (
@@ -831,8 +1046,6 @@ function dibujarCielo() {
         }
 
 
-        // Las estrellas brillantes son mayores
-
         const radio =
             Math.max(
                 0.5,
@@ -841,16 +1054,30 @@ function dibujarCielo() {
             );
 
 
-        const brillo =
+        let brillo =
             Math.max(
-                0.15,
-
+                0,
                 Math.min(
                     1,
                     1.2 -
                     magnitud / 8
                 )
             );
+
+
+        // Aplicar día/noche
+
+        brillo *=
+            brilloEstrellas;
+
+
+        if (
+            brillo <= 0
+        ) {
+
+            continue;
+
+        }
 
 
         // =================================================
@@ -874,7 +1101,6 @@ function dibujarCielo() {
 
 
         ctx.fill();
-
 
     }
 

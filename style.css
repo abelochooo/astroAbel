@@ -44,7 +44,6 @@ body {
 }
 
 
-/* CIELO */
 #cieloDiv {
     position: relative;
     width: 100%;
@@ -53,26 +52,37 @@ body {
     background: #02030a;
 }
 
+#fondoCielo {
+    position: absolute;
+    inset: 0;
+
+    background-image: url("./cielo-noche.jpg");
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+
+    z-index: 0;
+
+    transition:
+        opacity 10s ease,
+        background-image 10s ease;
+}
+
 #cielo {
     position: absolute;
     inset: 0;
+
     width: 100%;
     height: 100%;
-    display: block;
-}
 
+    z-index: 1;
+}
 
 #infoCielo {
     position: absolute;
-    top: 20px;
-    left: 20px;
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-    color: white;
-    font-family: Arial, sans-serif;
-    z-index: 10;
+    z-index: 2;
 }
+
 
 #camara,
 #cieloCamara {
