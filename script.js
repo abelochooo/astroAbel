@@ -48,3 +48,19 @@ async function iniciarCamara() {
 
 escribir();
 iniciarCamara();
+
+async function iniciar() {
+    if (typeof DeviceOrientationEvent.requestPermission === "function") {
+        const permiso = await DeviceOrientationEvent.requestPermission();
+
+        if (permiso !== "granted") return;
+    }
+
+    window.addEventListener("deviceorientation", (e) => {
+        console.log("Alpha:", e.alpha);
+        console.log("Beta:", e.beta);
+        console.log("Gamma:", e.gamma);
+    });
+}
+
+iniciar();
