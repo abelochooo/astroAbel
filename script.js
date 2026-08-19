@@ -733,8 +733,13 @@ function activarSensores() {
                 !Number.isNaN(evento.beta)
             ) {
 
+                // 'beta' es la inclinación física del móvil (0 = tumbado
+                // en la mesa mirando al cenit, 90 = vertical mirando al
+                // horizonte, 180 = boca abajo mirando al suelo).
+                // La elevación real de la cámara es su complementario:
+
                 pitch =
-                    evento.beta;
+                    90 - evento.beta;
 
 
                 altitudElemento.textContent =
