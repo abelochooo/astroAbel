@@ -67,8 +67,11 @@ body{
 
 #orientacion {
     position: fixed;
-    bottom: 15px;
-    background-color: white;
+    bottom: 20px;
+    right: 20px;
+    z-index: 9999;
     color: white;
-    right: 15px;
+    background: black;
+    padding: 10px;
+    border-radius: 10px;
 }
