@@ -145,6 +145,28 @@ async function obtenerUbicacion() {
                 error
             );
 
+            if (texto1) {
+
+                texto1.textContent =
+                    "No se pudo obtener tu ubicación";
+
+            }
+
+            if (ubicacion) {
+
+                ubicacion.textContent =
+                    `Código de error: ${error.code} - ${error.message}`;
+
+            }
+
+            setTimeout(() => {
+
+                if (ubicacionDiv) {
+                    ubicacionDiv.remove();
+                }
+
+            }, 3000);
+
         },
 
 
