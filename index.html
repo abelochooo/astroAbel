@@ -35,13 +35,16 @@
 </div>
 
 <script src="./script.js"></script>
-<script>document.getElementById("activar").addEventListener("click", async () => {
+<script>
+    document.getElementById("activar").addEventListener("click", async () => {
+
+    alert("¡Funciona!");
 
     if (typeof DeviceOrientationEvent.requestPermission === "function") {
         const permiso = await DeviceOrientationEvent.requestPermission();
 
         if (permiso !== "granted") {
-            alert("No se ha permitido el acceso a los sensores");
+            alert("Permiso denegado");
             return;
         }
     }
@@ -51,6 +54,7 @@
         document.getElementById("beta").textContent = e.beta?.toFixed(1);
         document.getElementById("gamma").textContent = e.gamma?.toFixed(1);
     });
-});</script>
+});
+</script>
 </body>
 </html>
