@@ -1,10 +1,11 @@
 body {
     display: flex;
     flex-direction: column;
-    background-color: white;
+    background-color: black;
     margin: 0;
     width: 100%;
     height: 100vh;
+    overflow: hidden;
 }
 
 /* PANTALLA INICIAL */
@@ -43,21 +44,27 @@ body {
     margin-top: -20px;
 }
 
-#camara,
-#cieloCamara {
+/* MODO AR: vídeo de la cámara real, siempre detrás de todo */
+#camara {
     position: fixed;
     inset: 0;
+    z-index: 1;
+
     width: 100%;
     height: 100%;
     object-fit: cover;
 }
 
-#camara {
-    z-index: 1;
-}
-
+/* Canvas donde se dibujan estrellas y constelaciones,
+   SIEMPRE con fondo transparente para que se vea la cámara debajo */
 #cieloCamara {
+    position: fixed;
+    inset: 0;
     z-index: 2;
+
+    width: 100%;
+    height: 100%;
+
     pointer-events: none;
 }
 
@@ -66,42 +73,31 @@ body {
     bottom: 100px;
     right: 15px;
     z-index: 100;
+
+    padding: 10px 16px;
+    border: none;
+    border-radius: 8px;
+
+    background: rgba(255, 255, 255, 0.9);
+    color: black;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 14px;
+
+    cursor: pointer;
 }
 
 #orientacion {
     position: fixed;
     bottom: 20px;
     right: 20px;
-    z-index: 9999;
+    z-index: 100;
+
     color: white;
-    background: rgb(0, 255, 26);
-    padding: 10px;
+    background: rgba(0, 0, 0, 0.55);
+    padding: 8px 12px;
     border-radius: 10px;
-}
-#cieloDiv {
-    position: relative;
-    width: 100%;
-    height: 100vh;
-    overflow: hidden;
-}
 
-#fondoCielo {
-    position: absolute;
-    inset: 0;
-    z-index: 0;
-
-    background-size: cover;
-    background-position: center;
-    background-repeat: no-repeat;
-}
-
-#cielo {
-    position: absolute;
-    inset: 0;
-    z-index: 1;
-}
-
-#infoCielo {
-    position: absolute;
-    z-index: 2;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 13px;
+    line-height: 1.4;
 }

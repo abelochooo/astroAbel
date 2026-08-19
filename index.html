@@ -1,42 +1,34 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Morph | Aprendizaje adaptado a tí.</title>
     <link rel="stylesheet" href="./style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Elms+Sans:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Elms+Sans:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
 </head>
 <body>
+
+    <!-- PANTALLA INICIAL DE UBICACIÓN -->
     <div id="ubicacionDiv" class="ubicacionDiv">
         <h1 id="ubicacionMensaje"></h1>
         <h4 id="ubicacionUsuario"></h4>
-    </div>  
-    <!--<div id="cieloDiv">
+    </div>
 
-    <div id="fondoCielo"></div>
-
-    <canvas id="cielo"></canvas>
-
-    <div id="infoCielo">
-        <span id="ubi"></span>
-        <span id="horaLocal"></span>
-    </div>!-->
-
-</div>
-    <video id="camara" autoplay playsinline></video>
+    <!-- MODO AR: cámara real de fondo + estrellas/constelaciones encima -->
+    <video id="camara" autoplay playsinline muted></video>
     <canvas id="cieloCamara"></canvas>
 
     <button id="activar">Activar sensores</button>
 
     <div id="orientacion">
-    Dirección: <span id="direccion">-</span><br>
-    Altitud: <span id="altitud">-</span>
-</div>
+        Dirección: <span id="direccion">-</span><br>
+        Altitud: <span id="altitud">-</span>
+    </div>
 
-<script src="https://cdn.jsdelivr.net/npm/astronomy-engine/astronomy.browser.min.js"></script>
-<script src="script.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/astronomy-engine/astronomy.browser.min.js"></script>
+    <script src="script.js"></script>
 </body>
 </html>
