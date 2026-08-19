@@ -43,55 +43,12 @@ body {
     margin-top: -20px;
 }
 
-
-#cieloDiv {
-    position: relative;
-    width: 100%;
-    height: 100vh;
-    overflow: hidden;
-    background: #02030a;
-}
-
-#fondoCielo {
-    position: absolute;
-    inset: 0;
-
-    background-image: url("./cielo-noche.jpg");
-    background-size: cover;
-    background-position: center;
-    background-repeat: no-repeat;
-
-    z-index: 0;
-
-    transition:
-        opacity 10s ease,
-        background-image 10s ease;
-}
-
-#cielo {
-    position: absolute;
-    inset: 0;
-
-    width: 100%;
-    height: 100%;
-
-    z-index: 1;
-}
-
-#infoCielo {
-    position: absolute;
-    z-index: 2;
-}
-
-
 #camara,
 #cieloCamara {
     position: fixed;
     inset: 0;
-
     width: 100%;
     height: 100%;
-
     object-fit: cover;
 }
 
@@ -120,4 +77,31 @@ body {
     background: rgb(0, 255, 26);
     padding: 10px;
     border-radius: 10px;
+}
+#cieloDiv {
+    position: relative;
+    width: 100%;
+    height: 100vh;
+    overflow: hidden;
+}
+
+#fondoCielo {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+
+#cielo {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+}
+
+#infoCielo {
+    position: absolute;
+    z-index: 2;
 }
