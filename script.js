@@ -80,6 +80,8 @@ document.getElementById("activar").addEventListener("click", async () => {
 
 const canvas = document.getElementById("cielo");
 
+document.getElementById("ubi").textContent = "CARGANDO STELLARIUM...";
+
 StelWebEngine({
     wasmFile: "stellarium/stellarium-web-engine.wasm",
     canvas: canvas,
