@@ -2,8 +2,10 @@ const texto1 = document.getElementById("ubicacionMensaje");
 const ubicacion = document.getElementById("ubicacionUsuario");
 const ubicacionDiv = document.getElementById("ubicacionDiv");
 const ubi = document.getElementById("ubi");
+
 const canvas = document.getElementById("cielo");
 const ctx = canvas.getContext("2d");
+
 const direccionElemento = document.getElementById("direccion");
 const altitudElemento = document.getElementById("altitud");
 
@@ -14,7 +16,7 @@ let estrellas = [];
 
 
 // =====================================================
-// ORIENTACIÓN DEL MÓVIL
+// ORIENTACIÓN
 // =====================================================
 
 let heading = 0;
@@ -46,6 +48,7 @@ function escribir() {
         obtenerUbicacion();
 
     }
+
 }
 
 
@@ -64,6 +67,7 @@ async function obtenerUbicacion() {
 
             console.log("Latitud:", latitud);
             console.log("Longitud:", longitud);
+
 
             try {
 
@@ -101,6 +105,7 @@ async function obtenerUbicacion() {
                 ubi.textContent =
                     `${ciudad}, ${country}`;
 
+
             } catch (error) {
 
                 console.error(
@@ -113,27 +118,19 @@ async function obtenerUbicacion() {
 
                 ubi.textContent =
                     "Ubicación obtenida";
+
             }
 
 
-            // =================================================
-            // CARGAR ESTRELLAS
-            // =================================================
+            // Cargar estrellas
 
             cargarEstrellas();
 
 
-            // =================================================
-            // ACTUALIZAR DÍA / NOCHE
-            // =================================================
+            // Actualizar fondo
 
             actualizarCieloDiaNoche();
 
-
-            // =================================================
-            // QUITAR PANTALLA DE UBICACIÓN
-            // DESPUÉS DE 3 SEGUNDOS
-            // =================================================
 
             setTimeout(() => {
 
@@ -145,6 +142,7 @@ async function obtenerUbicacion() {
 
         },
 
+
         error => {
 
             console.error(
@@ -153,6 +151,7 @@ async function obtenerUbicacion() {
             );
 
         },
+
 
         {
             enableHighAccuracy: true,
@@ -188,13 +187,14 @@ async function cargarEstrellas() {
             await respuesta.json();
 
         console.log(
-            "⭐ Estrellas:",
+            "⭐ Estrellas cargadas:",
             estrellas.length
         );
 
         redimensionarCanvas();
 
         dibujarCielo();
+
 
     } catch (error) {
 
@@ -258,6 +258,7 @@ function decAGrados(dec) {
         /([+-])(\d+)°\s*(\d+)′\s*(\d+(?:\.\d+)?)″/
     );
 
+
     if (!partes) {
 
         partes = dec.match(
@@ -266,9 +267,11 @@ function decAGrados(dec) {
 
     }
 
+
     if (!partes) {
         return null;
     }
+
 
     const signo =
         partes[1] === "-" ? -1 : 1;
@@ -281,6 +284,7 @@ function decAGrados(dec) {
 
     const segundos =
         Number(partes[4]);
+
 
     return signo * (
         grados +
@@ -304,14 +308,18 @@ function tiempoSideral() {
         return 0;
     }
 
+
     const ahora = new Date();
+
 
     const jd =
         ahora.getTime() / 86400000 +
         2440587.5;
 
+
     const T =
         (jd - 2451545.0) / 36525;
+
 
     let gmst =
         280.46061837 +
@@ -320,8 +328,10 @@ function tiempoSideral() {
         0.000387933 * T * T -
         T * T * T / 38710000;
 
+
     gmst =
         ((gmst % 360) + 360) % 360;
+
 
     return (
         (gmst + longitud) % 360 + 360
@@ -331,7 +341,7 @@ function tiempoSideral() {
 
 
 // =====================================================
-// RA/DEC → ALTITUD/AZIMUT
+// RA / DEC → AZIMUT / ALTITUD
 // =====================================================
 
 function estrellaAltAz(ra, dec) {
@@ -339,19 +349,24 @@ function estrellaAltAz(ra, dec) {
     const lst =
         tiempoSideral();
 
+
     let H =
         lst - ra;
 
+
     H =
         ((H + 180) % 360) - 180;
+
 
     const lat =
         latitud *
         Math.PI / 180;
 
+
     const decl =
         dec *
         Math.PI / 180;
+
 
     const hora =
         H *
@@ -367,6 +382,7 @@ function estrellaAltAz(ra, dec) {
         Math.cos(lat) *
         Math.cos(decl) *
         Math.cos(hora);
+
 
     const alt =
         Math.asin(
@@ -392,8 +408,10 @@ function estrellaAltAz(ra, dec) {
 
         );
 
+
     let azDeg =
         az * 180 / Math.PI + 180;
+
 
     azDeg =
         ((azDeg % 360) + 360) % 360;
@@ -419,64 +437,68 @@ function activarSensores() {
 
     let ultimaActualizacion = 0;
 
+
     window.addEventListener(
-
         "deviceorientation",
-
-        event => {
+        evento => {
 
             const ahora =
                 Date.now();
 
+
             if (
                 ahora -
                 ultimaActualizacion <
-                50
+                30
             ) {
                 return;
             }
 
+
             ultimaActualizacion =
                 ahora;
+
+
+            let nuevoHeading;
+
+
+            // =================================================
+            // IPHONE / IPAD
+            // =================================================
+
+            if (
+                typeof evento.webkitCompassHeading ===
+                "number"
+            ) {
+
+                nuevoHeading =
+                    evento.webkitCompassHeading;
+
+            }
+
+
+            // =================================================
+            // ANDROID / OTROS
+            // =================================================
+
+            else if (
+                typeof evento.alpha ===
+                "number"
+            ) {
+
+                nuevoHeading =
+                    360 -
+                    evento.alpha;
+
+            }
 
 
             // =================================================
             // DIRECCIÓN
             // =================================================
 
-            let nuevoHeading;
-
-
-            // iPhone / iPad
-
             if (
-                typeof event.webkitCompassHeading ===
-                "number"
-            ) {
-
-                nuevoHeading =
-                    event.webkitCompassHeading;
-
-            }
-
-
-            // Android / otros
-
-            else if (
-                typeof event.alpha ===
-                "number"
-            ) {
-
-                nuevoHeading =
-                    360 -
-                    event.alpha;
-
-            }
-
-
-            if (
-                typeof nuevoHeading ===
-                "number" &&
+                typeof nuevoHeading === "number" &&
                 !Number.isNaN(nuevoHeading)
             ) {
 
@@ -486,6 +508,7 @@ function activarSensores() {
                         360
                     ) % 360;
 
+
                 direccionElemento.textContent =
                     heading.toFixed(1) +
                     "°";
@@ -494,17 +517,17 @@ function activarSensores() {
 
 
             // =================================================
-            // INCLINACIÓN
+            // ALTITUD / INCLINACIÓN
             // =================================================
 
             if (
-                typeof event.beta ===
-                "number" &&
-                !Number.isNaN(event.beta)
+                typeof evento.beta === "number" &&
+                !Number.isNaN(evento.beta)
             ) {
 
                 pitch =
-                    event.beta;
+                    evento.beta;
+
 
                 altitudElemento.textContent =
                     pitch.toFixed(1) +
@@ -516,16 +539,14 @@ function activarSensores() {
             dibujarCielo();
 
         },
-
         true
-
     );
 
 }
 
 
 // =====================================================
-// BOTÓN DE SENSORES
+// BOTÓN
 // =====================================================
 
 document
@@ -549,16 +570,14 @@ document
                         await DeviceOrientationEvent
                             .requestPermission();
 
+
                     if (
                         permiso !==
                         "granted"
                     ) {
 
-                        console.error(
-                            "Permiso de orientación rechazado"
-                        );
-
                         return;
+
                     }
 
                 }
@@ -617,7 +636,7 @@ function dibujarCielo() {
 
 
     // =================================================
-    // FONDO OSCURO
+    // FONDO
     // =================================================
 
     ctx.fillStyle =
@@ -659,6 +678,7 @@ function dibujarCielo() {
                 estrella.RA
             );
 
+
         const dec =
             decAGrados(
                 estrella.Dec
@@ -680,7 +700,9 @@ function dibujarCielo() {
             );
 
 
-        // Debajo del horizonte
+        // =================================================
+        // DEBAJO DEL HORIZONTE
+        // =================================================
 
         if (
             posicion.altitud <= 0
@@ -690,7 +712,7 @@ function dibujarCielo() {
 
 
         // =================================================
-        // DIFERENCIA AZIMUT
+        // DIFERENCIA DE AZIMUT
         // =================================================
 
         let diferenciaAzimut =
@@ -701,27 +723,28 @@ function dibujarCielo() {
         while (
             diferenciaAzimut > 180
         ) {
+
             diferenciaAzimut -= 360;
+
         }
 
 
         while (
             diferenciaAzimut < -180
         ) {
+
             diferenciaAzimut += 360;
+
         }
 
 
         // =================================================
-        // DIFERENCIA ALTITUD
+        // DIFERENCIA DE ALTITUD
         // =================================================
-
-        const altitudTelefono =
-            pitch;
 
         const diferenciaAltitud =
             posicion.altitud -
-            altitudTelefono;
+            pitch;
 
 
         // =================================================
@@ -735,6 +758,7 @@ function dibujarCielo() {
             continue;
         }
 
+
         if (
             Math.abs(diferenciaAltitud) >
             FOV_VERTICAL / 2
@@ -744,28 +768,24 @@ function dibujarCielo() {
 
 
         // =================================================
-        // POSICIÓN
+        // POSICIÓN EN PANTALLA
         // =================================================
 
         const x =
             centroX +
-
             (
                 diferenciaAzimut /
                 (FOV_HORIZONTAL / 2)
             ) *
-
             centroX;
 
 
         const y =
             centroY -
-
             (
                 diferenciaAltitud /
                 (FOV_VERTICAL / 2)
             ) *
-
             centroY;
 
 
@@ -776,6 +796,7 @@ function dibujarCielo() {
         const magnitud =
             Number(estrella.V);
 
+
         if (
             Number.isNaN(magnitud)
         ) {
@@ -783,18 +804,22 @@ function dibujarCielo() {
         }
 
 
+        // Estrellas brillantes → grandes
+
         const radio =
             Math.max(
-                0.5,
-                3.5 -
-                magnitud * 0.45
+                0.6,
+                Math.min(
+                    5,
+                    3.8 -
+                    magnitud * 0.45
+                )
             );
 
 
         const brillo =
             Math.max(
                 0.15,
-
                 Math.min(
                     1,
                     1.2 -
@@ -804,10 +829,11 @@ function dibujarCielo() {
 
 
         // =================================================
-        // DIBUJAR
+        // ESTRELLA
         // =================================================
 
         ctx.beginPath();
+
 
         ctx.arc(
             x,
@@ -817,8 +843,10 @@ function dibujarCielo() {
             Math.PI * 2
         );
 
+
         ctx.fillStyle =
             `rgba(255,255,255,${brillo})`;
+
 
         ctx.fill();
 
@@ -837,17 +865,21 @@ function redimensionarCanvas() {
         window.devicePixelRatio ||
         1;
 
+
     canvas.width =
         window.innerWidth *
         escala;
+
 
     canvas.height =
         window.innerHeight *
         escala;
 
+
     canvas.style.width =
         window.innerWidth +
         "px";
+
 
     canvas.style.height =
         window.innerHeight +
@@ -932,6 +964,7 @@ function actualizarCieloDiaNoche() {
             "fondoCielo"
         );
 
+
     if (!fondo) {
         return;
     }
@@ -1012,17 +1045,11 @@ function actualizarCieloDiaNoche() {
 
     }
 
-
-    console.log(
-        "☀️ Altitud del Sol:",
-        altitudSol.toFixed(2)
-    );
-
 }
 
 
 // =====================================================
-// ACTUALIZAR DÍA/NOCHE CADA MINUTO
+// ACTUALIZAR DÍA / NOCHE
 // =====================================================
 
 setInterval(
