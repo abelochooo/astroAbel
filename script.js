@@ -50,15 +50,17 @@ escribir();
 iniciarCamara();
 
 document.getElementById("activar").addEventListener("click", async () => {
+    alert("Botón funcionando");
 
     if (typeof DeviceOrientationEvent.requestPermission === "function") {
         const permiso = await DeviceOrientationEvent.requestPermission();
+
+        alert("Permiso: " + permiso);
 
         if (permiso !== "granted") return;
     }
 
     window.addEventListener("deviceorientation", (e) => {
-
         document.getElementById("direccion").textContent =
             e.alpha?.toFixed(1) + "°";
 
