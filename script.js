@@ -2,6 +2,8 @@ const texto1 = document.getElementById("ubicacionMensaje");
 const ubicacion = document.getElementById("ubicacionUsuario");
 const ubicacionDiv = document.getElementById("ubicacionDiv");
 const ubi = document.getElementById("ubi");
+let latitud;
+let longitud;
 
 const texto = "Tu ubicación es";
 let i = 0;
@@ -18,6 +20,8 @@ function escribir() {
 
 async function obtenerUbicacion() {
     navigator.geolocation.getCurrentPosition(async ({ coords }) => {
+        latitud = coords.latitude;
+        longitud = coords.longitude;   
 
         const resultado = await fetch(
             `https://nominatim.openstreetmap.org/reverse?lat=${coords.latitude}&lon=${coords.longitude}&format=json`
