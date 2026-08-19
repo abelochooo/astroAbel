@@ -25,6 +25,11 @@ let pitch = 0;
 const FOV_HORIZONTAL = 90;
 const FOV_VERTICAL = 60;
 
+// "ar" = cámara real + sensores del móvil
+// "libre" = sin cámara, arrastras con el dedo/ratón (como Stellarium de escritorio)
+
+let modo = "ar";
+
 
 // =====================================================
 // EFECTO INICIAL
@@ -481,12 +486,101 @@ function estrellaAltAz(ra, dec, lst) {
 
 
 // =====================================================
+// VECTORES 3D (para proyección gnomónica correcta)
+// =====================================================
+// Convención: x = este, y = norte, z = arriba (cenit)
+
+function azAltAVector(azimutDeg, altitudDeg) {
+
+    const az = azimutDeg * Math.PI / 180;
+    const alt = altitudDeg * Math.PI / 180;
+
+    const cosAlt = Math.cos(alt);
+
+    return {
+        x: cosAlt * Math.sin(az),
+        y: cosAlt * Math.cos(az),
+        z: Math.sin(alt)
+    };
+
+}
+
+function producto(a, b) {
+
+    return a.x * b.x + a.y * b.y + a.z * b.z;
+
+}
+
+function cruz(a, b) {
+
+    return {
+        x: a.y * b.z - a.z * b.y,
+        y: a.z * b.x - a.x * b.z,
+        z: a.x * b.y - a.y * b.x
+    };
+
+}
+
+function normalizar(v) {
+
+    const longitud =
+        Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z) || 1;
+
+    return {
+        x: v.x / longitud,
+        y: v.y / longitud,
+        z: v.z / longitud
+    };
+
+}
+
+// Construye la base ortonormal de la cámara (hacia dónde mira,
+// su "derecha" y su "arriba") a partir de heading/pitch actuales.
+
+function baseCamara(headingDeg, pitchDeg) {
+
+    const forward =
+        azAltAVector(headingDeg, pitchDeg);
+
+    let right =
+        normalizar(
+            cruz(forward, { x: 0, y: 0, z: 1 })
+        );
+
+    // Caso degenerado: mirando casi exactamente al cenit/nadir,
+    // el "arriba del mundo" y "forward" quedan paralelos.
+    // Usamos un eje de referencia alternativo para ese caso.
+
+    if (
+        !isFinite(right.x) ||
+        (Math.abs(right.x) < 1e-9 &&
+         Math.abs(right.y) < 1e-9 &&
+         Math.abs(right.z) < 1e-9)
+    ) {
+
+        right =
+            normalizar(
+                cruz(forward, { x: 1, y: 0, z: 0 })
+            );
+
+    }
+
+    const up =
+        cruz(right, forward);
+
+    return { forward, right, up };
+
+}
+
+
+// =====================================================
 // PROYECTAR PUNTO (RA/Dec en grados → x, y en pantalla)
 // =====================================================
-// Devuelve null si el punto está fuera del horizonte
-// o fuera del campo de visión actual.
+// Proyección gnomónica (rectilínea): mucho más fiel que una
+// escala lineal de azimut/altitud, sobre todo cerca del cenit.
+// Devuelve null si el punto queda fuera de cámara o de pantalla.
 
-function proyectarPunto(ra, dec, lst, centroX, centroY) {
+function proyectarPunto(ra, dec, lst, base, focalH, focalV, centroX, centroY) {
 
     const posicion =
         estrellaAltAz(ra, dec, lst);
@@ -497,49 +591,43 @@ function proyectarPunto(ra, dec, lst, centroX, centroY) {
     }
 
 
-    let diferenciaAzimut =
-        posicion.azimut -
-        heading;
+    const punto =
+        azAltAVector(posicion.azimut, posicion.altitud);
 
 
-    while (diferenciaAzimut > 180) {
-        diferenciaAzimut -= 360;
-    }
-
-    while (diferenciaAzimut < -180) {
-        diferenciaAzimut += 360;
-    }
+    const pf =
+        producto(punto, base.forward);
 
 
-    const diferenciaAltitud =
-        posicion.altitud -
-        pitch;
+    // Detrás de la cámara (o casi en el límite, 90° de distancia)
 
-
-    if (
-        Math.abs(diferenciaAzimut) >
-        FOV_HORIZONTAL / 2
-    ) {
+    if (pf <= 0.01) {
         return null;
     }
 
-    if (
-        Math.abs(diferenciaAltitud) >
-        FOV_VERTICAL / 2
-    ) {
-        return null;
-    }
+
+    const px =
+        producto(punto, base.right);
+
+    const py =
+        producto(punto, base.up);
 
 
     const x =
-        centroX +
-        (diferenciaAzimut / (FOV_HORIZONTAL / 2)) *
-        centroX;
+        centroX + focalH * (px / pf);
 
     const y =
-        centroY -
-        (diferenciaAltitud / (FOV_VERTICAL / 2)) *
-        centroY;
+        centroY - focalV * (py / pf);
+
+
+    // Descarta puntos muy fuera de pantalla (con margen)
+
+    if (
+        x < -100 || x > centroX * 2 + 100 ||
+        y < -100 || y > centroY * 2 + 100
+    ) {
+        return null;
+    }
 
 
     return { x, y };
@@ -551,7 +639,7 @@ function proyectarPunto(ra, dec, lst, centroX, centroY) {
 // DIBUJAR CONSTELACIONES
 // =====================================================
 
-function dibujarConstelaciones(lst, centroX, centroY) {
+function dibujarConstelaciones(lst, base, focalH, focalV, centroX, centroY) {
 
     ctx.strokeStyle =
         "rgba(120, 170, 255, 0.55)";
@@ -579,10 +667,10 @@ function dibujarConstelaciones(lst, centroX, centroY) {
                 const [ra2, dec2] = linea[i + 1];
 
                 const p1 =
-                    proyectarPunto(ra1, dec1, lst, centroX, centroY);
+                    proyectarPunto(ra1, dec1, lst, base, focalH, focalV, centroX, centroY);
 
                 const p2 =
-                    proyectarPunto(ra2, dec2, lst, centroX, centroY);
+                    proyectarPunto(ra2, dec2, lst, base, focalH, focalV, centroX, centroY);
 
 
                 // Solo dibujamos el segmento si AMBOS extremos
@@ -649,6 +737,11 @@ function activarSensores() {
     window.addEventListener(
         "deviceorientation",
         evento => {
+
+            if (modo !== "ar") {
+                return;
+            }
+
 
             const ahora =
                 Date.now();
@@ -819,6 +912,149 @@ document
 
 
 // =====================================================
+// MODO AR / MODO LIBRE
+// =====================================================
+
+const botonModo =
+    document.getElementById("modoBoton");
+
+
+function cambiarModo() {
+
+    modo =
+        modo === "ar" ? "libre" : "ar";
+
+
+    document.body.classList.toggle(
+        "modo-libre",
+        modo === "libre"
+    );
+
+
+    if (botonModo) {
+
+        botonModo.textContent =
+            modo === "ar" ?
+                "Modo mapa libre" :
+                "Modo cámara (AR)";
+
+    }
+
+
+    dibujarCielo();
+
+}
+
+
+if (botonModo) {
+
+    botonModo.addEventListener(
+        "click",
+        cambiarModo
+    );
+
+}
+
+
+// =====================================================
+// ARRASTRE (rotar la vista en modo libre)
+// =====================================================
+
+let arrastrando = false;
+let arrastreInicioX = 0;
+let arrastreInicioY = 0;
+let headingAlIniciar = 0;
+let pitchAlIniciar = 0;
+
+
+function iniciarArrastre(clientX, clientY) {
+
+    if (modo !== "libre") {
+        return;
+    }
+
+    arrastrando = true;
+
+    arrastreInicioX = clientX;
+    arrastreInicioY = clientY;
+
+    headingAlIniciar = heading;
+    pitchAlIniciar = pitch;
+
+}
+
+
+function moverArrastre(clientX, clientY) {
+
+    if (!arrastrando || modo !== "libre") {
+        return;
+    }
+
+
+    const deltaX =
+        clientX - arrastreInicioX;
+
+    const deltaY =
+        clientY - arrastreInicioY;
+
+
+    // Grados por pixel, calculado con el FOV actual,
+    // para que arrastrar se sienta 1:1 con lo que ves en pantalla.
+
+    const gradosPorPixelX =
+        FOV_HORIZONTAL / window.innerWidth;
+
+    const gradosPorPixelY =
+        FOV_VERTICAL / window.innerHeight;
+
+
+    heading =
+        ((headingAlIniciar - deltaX * gradosPorPixelX) % 360 + 360) % 360;
+
+    pitch =
+        Math.max(
+            -85,
+            Math.min(
+                85,
+                pitchAlIniciar - deltaY * gradosPorPixelY
+            )
+        );
+
+
+    direccionElemento.textContent =
+        heading.toFixed(1) + "°";
+
+    altitudElemento.textContent =
+        pitch.toFixed(1) + "°";
+
+
+    dibujarCielo();
+
+}
+
+
+function terminarArrastre() {
+
+    arrastrando = false;
+
+}
+
+
+canvas.addEventListener(
+    "pointerdown",
+    evento => iniciarArrastre(evento.clientX, evento.clientY)
+);
+
+canvas.addEventListener(
+    "pointermove",
+    evento => moverArrastre(evento.clientX, evento.clientY)
+);
+
+window.addEventListener("pointerup", terminarArrastre);
+window.addEventListener("pointercancel", terminarArrastre);
+
+
+// =====================================================
 // DIBUJAR CIELO (AR sobre la cámara)
 // =====================================================
 
@@ -865,6 +1101,19 @@ function dibujarCielo() {
         tiempoSideral();
 
 
+    // Base de la cámara y distancia focal, calculadas UNA vez
+    // por frame y reutilizadas por estrellas y constelaciones.
+
+    const base =
+        baseCamara(heading, pitch);
+
+    const focalH =
+        centroX / Math.tan((FOV_HORIZONTAL * Math.PI / 180) / 2);
+
+    const focalV =
+        centroY / Math.tan((FOV_VERTICAL * Math.PI / 180) / 2);
+
+
     // =================================================
     // CONSTELACIONES (debajo de las estrellas)
     // =================================================
@@ -873,6 +1122,9 @@ function dibujarCielo() {
 
         dibujarConstelaciones(
             lst,
+            base,
+            focalH,
+            focalV,
             centroX,
             centroY
         );
@@ -916,101 +1168,22 @@ function dibujarCielo() {
         }
 
 
-        const posicion =
-            estrellaAltAz(
+        const p =
+            proyectarPunto(
                 ra,
                 dec,
-                lst
+                lst,
+                base,
+                focalH,
+                focalV,
+                centroX,
+                centroY
             );
 
 
-        // =================================================
-        // DEBAJO DEL HORIZONTE
-        // =================================================
-
-        if (
-            posicion.altitud <= 0
-        ) {
+        if (!p) {
             continue;
         }
-
-
-        // =================================================
-        // DIFERENCIA DE AZIMUT
-        // =================================================
-
-        let diferenciaAzimut =
-            posicion.azimut -
-            heading;
-
-
-        while (
-            diferenciaAzimut > 180
-        ) {
-
-            diferenciaAzimut -= 360;
-
-        }
-
-
-        while (
-            diferenciaAzimut < -180
-        ) {
-
-            diferenciaAzimut += 360;
-
-        }
-
-
-        // =================================================
-        // DIFERENCIA DE ALTITUD
-        // =================================================
-
-        const diferenciaAltitud =
-            posicion.altitud -
-            pitch;
-
-
-        // =================================================
-        // CAMPO DE VISIÓN
-        // =================================================
-
-        if (
-            Math.abs(diferenciaAzimut) >
-            FOV_HORIZONTAL / 2
-        ) {
-            continue;
-        }
-
-
-        if (
-            Math.abs(diferenciaAltitud) >
-            FOV_VERTICAL / 2
-        ) {
-            continue;
-        }
-
-
-        // =================================================
-        // POSICIÓN EN PANTALLA
-        // =================================================
-
-        const x =
-            centroX +
-            (
-                diferenciaAzimut /
-                (FOV_HORIZONTAL / 2)
-            ) *
-            centroX;
-
-
-        const y =
-            centroY -
-            (
-                diferenciaAltitud /
-                (FOV_VERTICAL / 2)
-            ) *
-            centroY;
 
 
         // =================================================
@@ -1060,8 +1233,8 @@ function dibujarCielo() {
 
 
         ctx.arc(
-            x,
-            y,
+            p.x,
+            p.y,
             radio,
             0,
             Math.PI * 2
