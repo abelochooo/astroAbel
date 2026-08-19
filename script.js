@@ -1,7 +1,6 @@
 const texto1 = document.getElementById("ubicacionMensaje");
 const ubicacion = document.getElementById("ubicacionUsuario");
 const ubicacionDiv = document.getElementById("ubicacionDiv");
-const ubi = document.getElementById("ubi");
 
 const canvas = document.getElementById("cieloCamara");
 const ctx = canvas.getContext("2d");
@@ -102,9 +101,6 @@ async function obtenerUbicacion() {
                 ubicacion.textContent =
                     `${ciudad}, ${country}`;
 
-                ubi.textContent =
-                    `${ciudad}, ${country}`;
-
 
             } catch (error) {
 
@@ -114,9 +110,6 @@ async function obtenerUbicacion() {
                 );
 
                 ubicacion.textContent =
-                    "Ubicación obtenida";
-
-                ubi.textContent =
                     "Ubicación obtenida";
 
             }
