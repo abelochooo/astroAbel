@@ -251,3 +251,188 @@ document
     .catch(error => {
         console.error("❌ Error cargando estrellas:", error);
     });
+
+    // =====================================================
+// CIELO ESTRELLADO
+// =====================================================
+
+let estrellas = [];
+
+
+// Cargar estrellas
+async function cargarEstrellas() {
+
+    try {
+
+        const respuesta = await fetch("estrellas.json");
+
+        estrellas = await respuesta.json();
+
+        console.log("⭐ Estrellas cargadas:", estrellas.length);
+
+        dibujarEstrellas();
+
+    } catch (error) {
+
+        console.error("❌ Error cargando estrellas:", error);
+
+    }
+}
+
+
+// -----------------------------------------------------
+// RA: "21h 24m 09.6s" -> grados
+// -----------------------------------------------------
+
+function raAGrados(ra) {
+
+    const partes = ra.match(
+        /(\d+)h\s*(\d+)m\s*([\d.]+)s/
+    );
+
+    if (!partes) return null;
+
+    const horas = Number(partes[1]);
+    const minutos = Number(partes[2]);
+    const segundos = Number(partes[3]);
+
+    return (
+        horas +
+        minutos / 60 +
+        segundos / 3600
+    ) * 15;
+}
+
+
+// -----------------------------------------------------
+// DEC: "-20° 51′ 07″" -> grados
+// -----------------------------------------------------
+
+function decAGrados(dec) {
+
+    const partes = dec.match(
+        /([+-])(\d+)°\s*(\d+)′\s*(\d+(?:\.\d+)?)″/
+    );
+
+    if (!partes) return null;
+
+    const signo = partes[1] === "-" ? -1 : 1;
+
+    const grados = Number(partes[2]);
+    const minutos = Number(partes[3]);
+    const segundos = Number(partes[4]);
+
+    return signo * (
+        grados +
+        minutos / 60 +
+        segundos / 3600
+    );
+}
+
+
+// -----------------------------------------------------
+// DIBUJAR
+// -----------------------------------------------------
+
+function dibujarEstrellas() {
+
+    const cielo = document.getElementById("cielo");
+
+    const ancho = window.innerWidth;
+    const alto = window.innerHeight;
+
+    cielo.width = ancho;
+    cielo.height = alto;
+
+    const ctx = cielo.getContext("2d");
+
+    ctx.clearRect(0, 0, ancho, alto);
+
+    for (const estrella of estrellas) {
+
+        if (!estrella.RA || !estrella.Dec) {
+            continue;
+        }
+
+        const ra = raAGrados(estrella.RA);
+        const dec = decAGrados(estrella.Dec);
+
+        if (ra === null || dec === null) {
+            continue;
+        }
+
+        /*
+         * DE MOMENTO hacemos una proyección sencilla.
+         *
+         * Esto NO es todavía el cielo real.
+         * Es solamente para comprobar que las
+         * 9096 estrellas aparecen.
+         */
+
+        const x =
+            ((ra / 360) * ancho);
+
+        const y =
+            ((90 - dec) / 180) * alto;
+
+
+        // Magnitud de la estrella
+
+        const magnitud = Number(estrella.V);
+
+        if (isNaN(magnitud)) {
+            continue;
+        }
+
+
+        // Las estrellas más brillantes son más grandes
+
+        const radio = Math.max(
+            0.5,
+            3.5 - magnitud * 0.45
+        );
+
+
+        const brillo = Math.max(
+            0.2,
+            Math.min(
+                1,
+                1.2 - magnitud / 8
+            )
+        );
+
+
+        ctx.beginPath();
+
+        ctx.arc(
+            x,
+            y,
+            radio,
+            0,
+            Math.PI * 2
+        );
+
+        ctx.fillStyle =
+            `rgba(255,255,255,${brillo})`;
+
+        ctx.fill();
+    }
+
+    console.log("✨ Estrellas dibujadas");
+
+}
+
+
+// =====================================================
+// INICIAR
+// =====================================================
+
+cargarEstrellas();
+
+
+// Redibujar cuando cambie el tamaño
+window.addEventListener(
+    "resize",
+    dibujarEstrellas
+);
+

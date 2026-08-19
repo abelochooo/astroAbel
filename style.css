@@ -62,24 +62,18 @@ body {
 }
 
 
-/* INFORMACIÓN DEL CIELO */
 #infoCielo {
     position: absolute;
     top: 20px;
     left: 20px;
-
     display: flex;
     flex-direction: column;
     gap: 5px;
-
     color: white;
     font-family: Arial, sans-serif;
-
     z-index: 10;
 }
 
-
-/* CÁMARA */
 #camara,
 #cieloCamara {
     position: fixed;
@@ -100,8 +94,6 @@ body {
     pointer-events: none;
 }
 
-
-/* BOTÓN */
 #activar {
     position: fixed;
     bottom: 100px;
@@ -109,18 +101,13 @@ body {
     z-index: 100;
 }
 
-
-/* ORIENTACIÓN */
 #orientacion {
     position: fixed;
     bottom: 20px;
     right: 20px;
-
     z-index: 9999;
-
     color: white;
     background: red;
-
     padding: 10px;
     border-radius: 10px;
 }
