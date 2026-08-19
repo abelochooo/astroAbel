@@ -1,0 +1,88 @@
+body{
+    display: flex;
+    flex-direction: column;
+    background-color: white;
+    margin: 0;
+    width: 100%;
+    height: 100vh;
+}
+
+.ubicacionDiv {
+    position: absolute;
+    z-index: 2;
+    background-color: beige;
+    width: 100%;
+    height: 100%;
+    color: black;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 20px;
+}
+
+
+.bienvenida{
+    z-index: -9999;
+}
+
+#bienvenidaMensaje{
+    text-align: center;
+    font-family: "Elms Sans", sans-serif;
+    font-weight: 500;
+    margin-top: 50px;
+    font-size: 50px;
+}
+
+#bienvenidaDescripcion{
+    text-align: center;
+    font-size: 25px;
+    margin-top: -10px;
+}
+.cardsAsignaturas{
+    width: 100%;
+    display: flex;
+    gap: 4rem;
+    height: 50%;
+    justify-content: center;
+    margin-top: 6%;
+}
+
+.cardsAsignaturas div{
+    height: 90%;
+    font-family: "Arial";
+    text-align: center;
+    width: 20%;
+}
+.mates{
+    color: #0091ff;
+    background-color: #cbdfee;
+    box-shadow: 1px 1px 1px #5fb9ff;
+}
+.fisica{
+    color: #2bff00;
+    background-color: #d2eecb;
+    box-shadow: 1px 1px 1px #7aff5f;
+}
+.quimica{
+    color: #6a00ff;
+    background-color: #e5cbee;
+    box-shadow: 1px 1px 1px #a25fff;
+}
+.ingles{
+    color: #ffea02;
+    background-color: #fff9cc;
+    box-shadow: 1px 1px 1px #fff25f;
+}
+
+.topicos{
+    list-style-position: outside;
+    padding-left: 30px
+}
+.topicos li{
+    text-align: justify;
+    padding-left: 10px;
+    font-size: 20px;
+    font-weight: 100;
+}
