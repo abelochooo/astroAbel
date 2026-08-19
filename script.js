@@ -48,3 +48,18 @@ async function iniciarCamara() {
 
 escribir();
 iniciarCamara();
+
+document.getElementById("activar").addEventListener("click", async () => {
+
+    if (typeof DeviceOrientationEvent.requestPermission === "function") {
+        const permiso = await DeviceOrientationEvent.requestPermission();
+
+        if (permiso !== "granted") return;
+    }
+
+    window.addEventListener("deviceorientation", (e) => {
+        document.getElementById("alpha").textContent = e.alpha;
+        document.getElementById("beta").textContent = e.beta;
+        document.getElementById("gamma").textContent = e.gamma;
+    });
+});
