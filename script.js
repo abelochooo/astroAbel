@@ -48,35 +48,3 @@ async function iniciarCamara() {
 
 escribir();
 iniciarCamara();
-
-async function iniciar() {
-    console.log("Botón pulsado");
-
-    if (typeof DeviceOrientationEvent.requestPermission === "function") {
-        console.log("Pidiendo permiso...");
-
-        const permiso = await DeviceOrientationEvent.requestPermission();
-
-        console.log("Permiso:", permiso);
-
-        if (permiso !== "granted") {
-            console.log("Permiso rechazado");
-            return;
-        }
-    }
-
-    console.log("Sensores activados");
-
-    window.addEventListener("deviceorientation", (e) => {
-        console.log("Orientación:", e.alpha, e.beta, e.gamma);
-
-        document.getElementById("alpha").textContent =
-            e.alpha?.toFixed(1);
-
-        document.getElementById("beta").textContent =
-            e.beta?.toFixed(1);
-
-        document.getElementById("gamma").textContent =
-            e.gamma?.toFixed(1);
-    });
-}
