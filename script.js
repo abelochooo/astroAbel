@@ -2,11 +2,6 @@ const texto1 = document.getElementById("ubicacionMensaje");
 const ubicacion = document.getElementById("ubicacionUsuario");
 const ubicacionDiv = document.getElementById("ubicacionDiv");
 const ubi = document.getElementById("ubi");
-const transmision = await navigator.mediaDevices.getUserMedia({
-    video: {
-        facingMode: "enviorenment"
-    }
-});
 
 const texto = "Tu ubicación es";
 let i = 0;
@@ -35,7 +30,7 @@ async function obtenerUbicacion() {
         const ciudad = city || town || village || municipality;
 
         ubicacion.textContent = `${ciudad}, ${country}`;
-
+        ubi.textContent = `${ciudad}, ${country}`;
 
         setTimeout(() => {
             ubicacionDiv.remove();
@@ -43,7 +38,13 @@ async function obtenerUbicacion() {
     });
 }
 
+async function iniciarCamara() {
+    const transmision = await navigator.mediaDevices.getUserMedia({
+        video: {
+            facingMode: "environment"
+        }
+    });
+}
+
 escribir();
-
-ubi.textContent = ciudad;
-
+iniciarCamara();
