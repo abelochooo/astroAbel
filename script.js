@@ -53,11 +53,13 @@ async function iniciar() {
     if (typeof DeviceOrientationEvent.requestPermission === "function") {
         const permiso = await DeviceOrientationEvent.requestPermission();
 
+        console.log("Permiso:", permiso);
+
         if (permiso !== "granted") return;
     }
 
     window.addEventListener("deviceorientation", (e) => {
-        console.log(e);
+        console.log("Evento recibido:", e);
 
         document.getElementById("alpha").textContent = e.alpha;
         document.getElementById("beta").textContent = e.beta;
