@@ -238,3 +238,16 @@ document
         );
 
     });
+
+    fetch("estrellas.json")
+    .then(respuesta => {
+        console.log("Respuesta:", respuesta.status);
+        return respuesta.json();
+    })
+    .then(datos => {
+        console.log("⭐ Estrellas:", datos.length);
+        console.log("Primera:", datos[0]);
+    })
+    .catch(error => {
+        console.error("❌ Error cargando estrellas:", error);
+    });
