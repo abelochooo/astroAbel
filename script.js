@@ -3,12 +3,23 @@ const ubicacion = document.getElementById("ubicacionUsuario");
 const ubicacionDiv = document.getElementById("ubicacionDiv");
 const ubi = document.getElementById("ubi");
 
+const canvas = document.getElementById("cielo");
+const ctx = canvas.getContext("2d");
+
 let latitud;
 let longitud;
 
+let estrellas = [];
+
+let heading = 0;
+let pitch = 0;
+
+const FOV_HORIZONTAL = 90;
+const FOV_VERTICAL = 60;
+
 
 // =====================================================
-// TEXTO INICIAL
+// PANTALLA INICIAL
 // =====================================================
 
 const texto = "Tu ubicación es";
@@ -48,16 +59,13 @@ async function obtenerUbicacion() {
             console.log("Latitud:", latitud);
             console.log("Longitud:", longitud);
 
-
             try {
 
                 const resultado = await fetch(
                     `https://nominatim.openstreetmap.org/reverse?lat=${latitud}&lon=${longitud}&format=json`
                 );
 
-                const informacion =
-                    await resultado.json();
-
+                const informacion = await resultado.json();
 
                 const {
                     city,
@@ -67,7 +75,6 @@ async function obtenerUbicacion() {
                     country
                 } = informacion.address;
 
-
                 const ciudad =
                     city ||
                     town ||
@@ -75,214 +82,85 @@ async function obtenerUbicacion() {
                     municipality ||
                     "Ubicación desconocida";
 
-
                 ubicacion.textContent =
                     `${ciudad}, ${country}`;
-
 
                 ubi.textContent =
                     `${ciudad}, ${country}`;
 
-
             } catch (error) {
 
-                console.error(
-                    "Error obteniendo la ciudad:",
-                    error
-                );
+                console.error(error);
 
                 ubicacion.textContent =
                     "Ubicación obtenida";
 
             }
 
+            cargarEstrellas();
 
-            // =========================================
-            // AQUÍ SE MANTIENE TU EFECTO ORIGINAL
-            // =========================================
-
+            // TU EFECTO ORIGINAL
             setTimeout(() => {
-
                 ubicacionDiv.remove();
-
             }, 3000);
 
         },
 
-
-        (error) => {
+        error => {
 
             console.error(
-                "Error de geolocalización:",
+                "Error de ubicación:",
                 error
             );
 
-            ubicacion.textContent =
-                "No se pudo obtener la ubicación.";
+        },
 
+        {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 0
         }
 
     );
-
 }
 
 
 // =====================================================
-// CÁMARA
+// CARGAR ESTRELLAS
 // =====================================================
 
-async function iniciarCamara() {
-
-    try {
-
-        const transmision =
-            await navigator.mediaDevices.getUserMedia({
-
-                video: {
-                    facingMode: "environment"
-                }
-
-            });
-
-
-        const camara =
-            document.getElementById("camara");
-
-
-        camara.srcObject =
-            transmision;
-
-
-    } catch (error) {
-
-        console.error(
-            "Error al iniciar la cámara:",
-            error
-        );
-
-    }
-
-}
-
-
-// =====================================================
-// INICIO
-// =====================================================
-
-escribir();
-
-iniciarCamara();
-
-
-// =====================================================
-// SENSORES
-// =====================================================
-
-document
-    .getElementById("activar")
-    .addEventListener("click", async () => {
-
-        if (
-            typeof DeviceOrientationEvent.requestPermission ===
-            "function"
-        ) {
-
-            const permiso =
-                await DeviceOrientationEvent.requestPermission();
-
-
-            if (permiso !== "granted") {
-
-                return;
-
-            }
-
-        }
-
-
-        let ultimaActualizacion = 0;
-
-
-        window.addEventListener(
-            "deviceorientation",
-            (e) => {
-
-                const ahora = Date.now();
-
-
-                if (
-                    ahora - ultimaActualizacion <
-                    100
-                ) {
-
-                    return;
-
-                }
-
-
-                ultimaActualizacion = ahora;
-
-
-                document.getElementById(
-                    "direccion"
-                ).textContent =
-                    e.alpha?.toFixed(1) + "°";
-
-
-                document.getElementById(
-                    "altitud"
-                ).textContent =
-                    e.beta?.toFixed(1) + "°";
-
-            }
-        );
-
-    });
-
-    fetch("estrellas.json")
-    .then(respuesta => {
-        console.log("Respuesta:", respuesta.status);
-        return respuesta.json();
-    })
-    .then(datos => {
-        console.log("⭐ Estrellas:", datos.length);
-        console.log("Primera:", datos[0]);
-    })
-    .catch(error => {
-        console.error("❌ Error cargando estrellas:", error);
-    });
-
-    // =====================================================
-// CIELO ESTRELLADO
-// =====================================================
-
-let estrellas = [];
-
-
-// Cargar estrellas
 async function cargarEstrellas() {
 
     try {
 
-        const respuesta = await fetch("estrellas.json");
+        const respuesta =
+            await fetch("estrellas.json");
 
-        estrellas = await respuesta.json();
+        estrellas =
+            await respuesta.json();
 
-        console.log("⭐ Estrellas cargadas:", estrellas.length);
+        console.log(
+            "⭐ Estrellas:",
+            estrellas.length
+        );
 
-        dibujarEstrellas();
+        redimensionarCanvas();
+        dibujarCielo();
 
     } catch (error) {
 
-        console.error("❌ Error cargando estrellas:", error);
+        console.error(
+            "Error cargando estrellas:",
+            error
+        );
 
     }
 }
 
 
-// -----------------------------------------------------
-// RA: "21h 24m 09.6s" -> grados
-// -----------------------------------------------------
+// =====================================================
+// CONVERSIÓN RA
+// =====================================================
 
 function raAGrados(ra) {
 
@@ -292,9 +170,14 @@ function raAGrados(ra) {
 
     if (!partes) return null;
 
-    const horas = Number(partes[1]);
-    const minutos = Number(partes[2]);
-    const segundos = Number(partes[3]);
+    const horas =
+        Number(partes[1]);
+
+    const minutos =
+        Number(partes[2]);
+
+    const segundos =
+        Number(partes[3]);
 
     return (
         horas +
@@ -304,9 +187,9 @@ function raAGrados(ra) {
 }
 
 
-// -----------------------------------------------------
-// DEC: "-20° 51′ 07″" -> grados
-// -----------------------------------------------------
+// =====================================================
+// CONVERSIÓN DEC
+// =====================================================
 
 function decAGrados(dec) {
 
@@ -316,11 +199,17 @@ function decAGrados(dec) {
 
     if (!partes) return null;
 
-    const signo = partes[1] === "-" ? -1 : 1;
+    const signo =
+        partes[1] === "-" ? -1 : 1;
 
-    const grados = Number(partes[2]);
-    const minutos = Number(partes[3]);
-    const segundos = Number(partes[4]);
+    const grados =
+        Number(partes[2]);
+
+    const minutos =
+        Number(partes[3]);
+
+    const segundos =
+        Number(partes[4]);
 
     return signo * (
         grados +
@@ -330,76 +219,388 @@ function decAGrados(dec) {
 }
 
 
-// -----------------------------------------------------
-// DIBUJAR
-// -----------------------------------------------------
+// =====================================================
+// TIEMPO SIDERAL
+// =====================================================
 
-function dibujarEstrellas() {
+function tiempoSideral() {
 
-    const cielo = document.getElementById("cielo");
+    const ahora = new Date();
 
-    const ancho = window.innerWidth;
-    const alto = window.innerHeight;
+    const jd =
+        ahora.getTime() / 86400000 +
+        2440587.5;
 
-    cielo.width = ancho;
-    cielo.height = alto;
+    const T =
+        (jd - 2451545.0) / 36525;
 
-    const ctx = cielo.getContext("2d");
+    let gmst =
+        280.46061837 +
+        360.98564736629 *
+        (jd - 2451545.0) +
+        0.000387933 * T * T -
+        T * T * T / 38710000;
 
-    ctx.clearRect(0, 0, ancho, alto);
+    gmst =
+        ((gmst % 360) + 360) % 360;
 
-    for (const estrella of estrellas) {
+    return gmst + longitud;
+}
 
-        if (!estrella.RA || !estrella.Dec) {
+
+// =====================================================
+// RA / DEC → ALTITUD / AZIMUT
+// =====================================================
+
+function estrellaAltAz(ra, dec) {
+
+    const lst =
+        tiempoSideral();
+
+    let H =
+        lst - ra;
+
+    H =
+        ((H + 180) % 360) - 180;
+
+    const lat =
+        latitud *
+        Math.PI / 180;
+
+    const decl =
+        dec *
+        Math.PI / 180;
+
+    const hora =
+        H *
+        Math.PI / 180;
+
+
+    const sinAlt =
+        Math.sin(lat) *
+        Math.sin(decl) +
+        Math.cos(lat) *
+        Math.cos(decl) *
+        Math.cos(hora);
+
+    const alt =
+        Math.asin(sinAlt);
+
+
+    const az =
+        Math.atan2(
+            Math.sin(hora),
+            Math.cos(hora) *
+            Math.sin(lat) -
+            Math.tan(decl) *
+            Math.cos(lat)
+        );
+
+
+    let azDeg =
+        az *
+        180 / Math.PI +
+        180;
+
+    azDeg =
+        ((azDeg % 360) + 360) % 360;
+
+
+    return {
+
+        azimut: azDeg,
+
+        altitud:
+            alt *
+            180 / Math.PI
+
+    };
+}
+
+
+// =====================================================
+// ORIENTACIÓN DEL MÓVIL
+// =====================================================
+
+function activarSensores() {
+
+    window.addEventListener(
+        "deviceorientation",
+        e => {
+
+            let nuevoHeading;
+
+            // iPhone / iPad
+            if (
+                typeof e.webkitCompassHeading ===
+                "number"
+            ) {
+
+                nuevoHeading =
+                    e.webkitCompassHeading;
+
+            } else if (
+                typeof e.alpha ===
+                "number"
+            ) {
+
+                nuevoHeading =
+                    360 - e.alpha;
+
+            }
+
+
+            if (
+                typeof nuevoHeading ===
+                "number"
+            ) {
+
+                heading =
+                    nuevoHeading;
+            }
+
+
+            if (
+                typeof e.beta ===
+                "number"
+            ) {
+
+                pitch =
+                    e.beta;
+
+            }
+
+
+            dibujarCielo();
+
+        },
+        true
+    );
+
+}
+
+
+// =====================================================
+// BOTÓN SENSORES
+// =====================================================
+
+document
+    .getElementById("activar")
+    .addEventListener(
+        "click",
+        async () => {
+
+            if (
+                typeof DeviceOrientationEvent
+                    .requestPermission ===
+                "function"
+            ) {
+
+                const permiso =
+                    await DeviceOrientationEvent
+                        .requestPermission();
+
+                if (
+                    permiso !== "granted"
+                ) {
+
+                    return;
+                }
+            }
+
+            activarSensores();
+
+        }
+    );
+
+
+// =====================================================
+// DIBUJAR CIELO
+// =====================================================
+
+function dibujarCielo() {
+
+    if (
+        latitud === undefined ||
+        estrellas.length === 0
+    ) {
+
+        return;
+    }
+
+
+    const ancho =
+        canvas.width;
+
+    const alto =
+        canvas.height;
+
+
+    ctx.fillStyle =
+        "#02030a";
+
+    ctx.fillRect(
+        0,
+        0,
+        ancho,
+        alto
+    );
+
+
+    const centroX =
+        ancho / 2;
+
+    const centroY =
+        alto / 2;
+
+
+    for (
+        const estrella of estrellas
+    ) {
+
+        if (
+            !estrella.RA ||
+            !estrella.Dec
+        ) {
+
             continue;
         }
 
-        const ra = raAGrados(estrella.RA);
-        const dec = decAGrados(estrella.Dec);
 
-        if (ra === null || dec === null) {
+        const ra =
+            raAGrados(
+                estrella.RA
+            );
+
+        const dec =
+            decAGrados(
+                estrella.Dec
+            );
+
+
+        if (
+            ra === null ||
+            dec === null
+        ) {
+
             continue;
         }
 
-        /*
-         * DE MOMENTO hacemos una proyección sencilla.
-         *
-         * Esto NO es todavía el cielo real.
-         * Es solamente para comprobar que las
-         * 9096 estrellas aparecen.
-         */
+
+        const posicion =
+            estrellaAltAz(
+                ra,
+                dec
+            );
+
+
+        // Debajo del horizonte
+        if (
+            posicion.altitud <= 0
+        ) {
+
+            continue;
+        }
+
+
+        let diferenciaAzimut =
+            posicion.azimut -
+            heading;
+
+
+        while (
+            diferenciaAzimut > 180
+        ) {
+
+            diferenciaAzimut -= 360;
+
+        }
+
+        while (
+            diferenciaAzimut < -180
+        ) {
+
+            diferenciaAzimut += 360;
+
+        }
+
+
+        const diferenciaAltitud =
+            posicion.altitud -
+            pitch;
+
+
+        // Fuera del campo de visión
+        if (
+            Math.abs(
+                diferenciaAzimut
+            ) >
+            FOV_HORIZONTAL / 2
+        ) {
+
+            continue;
+        }
+
+
+        if (
+            Math.abs(
+                diferenciaAltitud
+            ) >
+            FOV_VERTICAL / 2
+        ) {
+
+            continue;
+        }
+
 
         const x =
-            ((ra / 360) * ancho);
+            centroX +
+            (
+                diferenciaAzimut /
+                (FOV_HORIZONTAL / 2)
+            ) *
+            centroX;
+
 
         const y =
-            ((90 - dec) / 180) * alto;
+            centroY -
+            (
+                diferenciaAltitud /
+                (FOV_VERTICAL / 2)
+            ) *
+            centroY;
 
 
-        // Magnitud de la estrella
+        const magnitud =
+            Number(estrella.V);
 
-        const magnitud = Number(estrella.V);
 
-        if (isNaN(magnitud)) {
+        if (
+            Number.isNaN(magnitud)
+        ) {
+
             continue;
         }
 
 
-        // Las estrellas más brillantes son más grandes
+        // Magnitud → tamaño
+        const radio =
+            Math.max(
+                0.5,
+                3.5 -
+                magnitud * 0.45
+            );
 
-        const radio = Math.max(
-            0.5,
-            3.5 - magnitud * 0.45
-        );
 
-
-        const brillo = Math.max(
-            0.2,
-            Math.min(
-                1,
-                1.2 - magnitud / 8
-            )
-        );
+        const brillo =
+            Math.max(
+                0.25,
+                Math.min(
+                    1,
+                    1.2 -
+                    magnitud / 8
+                )
+            );
 
 
         ctx.beginPath();
@@ -412,27 +613,95 @@ function dibujarEstrellas() {
             Math.PI * 2
         );
 
+
         ctx.fillStyle =
             `rgba(255,255,255,${brillo})`;
 
         ctx.fill();
-    }
 
-    console.log("✨ Estrellas dibujadas");
+    }
 
 }
 
 
 // =====================================================
-// INICIAR
+// CANVAS
 // =====================================================
 
-cargarEstrellas();
+function redimensionarCanvas() {
+
+    const escala =
+        window.devicePixelRatio || 1;
+
+    canvas.width =
+        window.innerWidth *
+        escala;
+
+    canvas.height =
+        window.innerHeight *
+        escala;
+
+    canvas.style.width =
+        window.innerWidth + "px";
+
+    canvas.style.height =
+        window.innerHeight + "px";
+
+    ctx.setTransform(
+        escala,
+        0,
+        0,
+        escala,
+        0,
+        0
+    );
+
+    dibujarCielo();
+}
 
 
-// Redibujar cuando cambie el tamaño
 window.addEventListener(
     "resize",
-    dibujarEstrellas
+    redimensionarCanvas
 );
 
+
+// =====================================================
+// CÁMARA
+// =====================================================
+
+async function iniciarCamara() {
+
+    try {
+
+        const transmision =
+            await navigator.mediaDevices
+                .getUserMedia({
+                    video: {
+                        facingMode: "environment"
+                    }
+                });
+
+        document.getElementById(
+            "camara"
+        ).srcObject =
+            transmision;
+
+    } catch (error) {
+
+        console.error(
+            "Error al iniciar la cámara:",
+            error
+        );
+
+    }
+}
+
+
+// =====================================================
+// INICIO
+// =====================================================
+
+escribir();
+
+iniciarCamara();
