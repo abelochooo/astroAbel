@@ -77,3 +77,15 @@ document.getElementById("activar").addEventListener("click", async () => {
             e.beta?.toFixed(1) + "°";
     });
 });
+
+const canvas = document.getElementById("cielo");
+
+StelWebEngine({
+    wasmFile: "stellarium/stellarium-web-engine.wasm",
+    canvas: canvas,
+
+    onReady: function(stel) {
+        document.getElementById("ubi").textContent =
+            "Stellarium funcionando";
+    }
+});
