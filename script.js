@@ -3,7 +3,7 @@ const ubicacion = document.getElementById("ubicacionUsuario");
 const ubicacionDiv = document.getElementById("ubicacionDiv");
 const ubi = document.getElementById("ubi");
 
-const canvas = document.getElementById("cielo");
+const canvas = document.getElementById("cieloCamara");
 const ctx = canvas.getContext("2d");
 
 const direccionElemento = document.getElementById("direccion");
@@ -125,11 +125,6 @@ async function obtenerUbicacion() {
             // Cargar estrellas
 
             cargarEstrellas();
-
-
-            // Actualizar fondo
-
-            actualizarCieloDiaNoche();
 
 
             setTimeout(() => {
@@ -344,11 +339,7 @@ function tiempoSideral() {
 // RA / DEC → AZIMUT / ALTITUD
 // =====================================================
 
-function estrellaAltAz(ra, dec) {
-
-    const lst =
-        tiempoSideral();
-
+function estrellaAltAz(ra, dec, lst) {
 
     let H =
         lst - ra;
@@ -606,7 +597,7 @@ document
 
 
 // =====================================================
-// DIBUJAR CIELO
+// DIBUJAR CIELO (AR sobre la cámara)
 // =====================================================
 
 function dibujarCielo() {
@@ -627,22 +618,10 @@ function dibujarCielo() {
         window.innerHeight;
 
 
+    // Solo limpiamos: el fondo es el vídeo de la cámara,
+    // no pintamos ningún rectángulo opaco encima.
+
     ctx.clearRect(
-        0,
-        0,
-        ancho,
-        alto
-    );
-
-
-    // =================================================
-    // FONDO
-    // =================================================
-
-    ctx.fillStyle =
-        "#02030a";
-
-    ctx.fillRect(
         0,
         0,
         ancho,
@@ -655,6 +634,13 @@ function dibujarCielo() {
 
     const centroY =
         alto / 2;
+
+
+    // Tiempo sideral calculado UNA sola vez por frame,
+    // no por cada estrella.
+
+    const lst =
+        tiempoSideral();
 
 
     // =================================================
@@ -696,7 +682,8 @@ function dibujarCielo() {
         const posicion =
             estrellaAltAz(
                 ra,
-                dec
+                dec,
+                lst
             );
 
 
@@ -943,119 +930,6 @@ async function iniciarCamara() {
     }
 
 }
-
-
-// =====================================================
-// DÍA / NOCHE
-// =====================================================
-
-function actualizarCieloDiaNoche() {
-
-    if (
-        latitud === undefined ||
-        longitud === undefined
-    ) {
-        return;
-    }
-
-
-    const fondo =
-        document.getElementById(
-            "fondoCielo"
-        );
-
-
-    if (!fondo) {
-        return;
-    }
-
-
-    const ahora =
-        new Date();
-
-
-    const observador =
-        new Astronomy.Observer(
-            latitud,
-            longitud,
-            0
-        );
-
-
-    const sol =
-        Astronomy.Equator(
-            Astronomy.Body.Sun,
-            ahora,
-            observador,
-            true,
-            true
-        );
-
-
-    const horizonte =
-        Astronomy.Horizon(
-            ahora,
-            observador,
-            sol.ra,
-            sol.dec,
-            "normal"
-        );
-
-
-    const altitudSol =
-        horizonte.altitude;
-
-
-    // =================================================
-    // DÍA
-    // =================================================
-
-    if (
-        altitudSol > 6
-    ) {
-
-        fondo.style.backgroundImage =
-            'url("./cielo-dia.jpg")';
-
-    }
-
-
-    // =================================================
-    // CREPÚSCULO
-    // =================================================
-
-    else if (
-        altitudSol > -6
-    ) {
-
-        fondo.style.backgroundImage =
-            'url("./cielo-noche.jpg")';
-
-    }
-
-
-    // =================================================
-    // NOCHE
-    // =================================================
-
-    else {
-
-        fondo.style.backgroundImage =
-            'url("./cielo-noche.jpg")';
-
-    }
-
-}
-
-
-// =====================================================
-// ACTUALIZAR DÍA / NOCHE
-// =====================================================
-
-setInterval(
-    actualizarCieloDiaNoche,
-    60000
-);
 
 
 // =====================================================
