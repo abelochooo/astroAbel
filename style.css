@@ -68,5 +68,6 @@ body{
 #orientacion {
     position: fixed;
     bottom: 15px;
+    background-color: white;
     right: 15px;
 }

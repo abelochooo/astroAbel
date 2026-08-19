@@ -57,9 +57,9 @@ document.getElementById("activar").addEventListener("click", async () => {
         if (permiso !== "granted") return;
     }
 
-    window.addEventListener("deviceorientation", (e) => {
-        document.getElementById("alpha").textContent = e.alpha;
-        document.getElementById("beta").textContent = e.beta;
-        document.getElementById("gamma").textContent = e.gamma;
+    window.addEventListener("deviceorientationabsolute", (e) => {
+        document.getElementById("alpha").textContent = e.alpha?.toFixed(1);
+        document.getElementById("beta").textContent = e.beta?.toFixed(1);
+        document.getElementById("gamma").textContent = e.gamma?.toFixed(1);
     });
 });
