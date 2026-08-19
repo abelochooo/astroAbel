@@ -57,8 +57,19 @@ document.getElementById("activar").addEventListener("click", async () => {
         if (permiso !== "granted") return;
     }
 
+    let ultimaActualizacion = 0;
+
     window.addEventListener("deviceorientation", (e) => {
-        document.getElementById("direccion").textContent = e.alpha;
-        document.getElementById("altitud").textContent = e.beta;
+        const ahora = Date.now();
+
+        if (ahora - ultimaActualizacion < 100) return;
+
+        ultimaActualizacion = ahora;
+
+        document.getElementById("direccion").textContent =
+            e.alpha?.toFixed(1) + "°";
+
+        document.getElementById("altitud").textContent =
+            e.beta?.toFixed(1) + "°";
     });
 });
