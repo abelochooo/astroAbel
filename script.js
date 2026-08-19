@@ -60,6 +60,10 @@ async function iniciar() {
         console.log("Alpha:", e.alpha);
         console.log("Beta:", e.beta);
         console.log("Gamma:", e.gamma);
+
+        document.getElementById("alpha").textContent = e.alpha?.toFixed(1);
+        document.getElementById("beta").textContent = e.beta?.toFixed(1);
+        document.getElementById("gamma").textContent = e.gamma?.toFixed(1);
     });
 }
 
