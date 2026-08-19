@@ -58,8 +58,11 @@ document.getElementById("activar").addEventListener("click", async () => {
     }
 
     window.addEventListener("deviceorientation", (e) => {
-        document.getElementById("alpha").textContent = e.alpha?.toFixed(1);
-        document.getElementById("beta").textContent = e.beta?.toFixed(1);
-        document.getElementById("gamma").textContent = e.gamma?.toFixed(1);
+
+        document.getElementById("direccion").textContent =
+            e.alpha?.toFixed(1) + "°";
+
+        document.getElementById("altitud").textContent =
+            e.beta?.toFixed(1) + "°";
     });
 });
