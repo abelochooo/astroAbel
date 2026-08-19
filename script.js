@@ -85,7 +85,6 @@ StelWebEngine({
     canvas: canvas,
 
     onReady: function(stel) {
-        document.getElementById("ubi").textContent =
-            "Stellarium funcionando";
+        document.getElementById("ubi").textContent = "STELLARIUM OK";
     }
 });
