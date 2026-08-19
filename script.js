@@ -53,18 +53,17 @@ async function iniciar() {
     if (typeof DeviceOrientationEvent.requestPermission === "function") {
         const permiso = await DeviceOrientationEvent.requestPermission();
 
-        console.log("Permiso:", permiso);
-
-        if (permiso !== "granted") return;
+        if (permiso !== "granted") {
+            console.log("Permiso denegado");
+            return;
+        }
     }
 
     window.addEventListener("deviceorientation", (e) => {
-        console.log("Evento recibido:", e);
+        console.log(e.alpha, e.beta, e.gamma);
 
         document.getElementById("alpha").textContent = e.alpha;
         document.getElementById("beta").textContent = e.beta;
         document.getElementById("gamma").textContent = e.gamma;
     });
 }
-
-iniciar();
