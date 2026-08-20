@@ -226,3 +226,48 @@ body.modo-libre #activar {
 #fovControl input {
     width: 100%;
 }
+
+#buscadorObjetos{
+    display:none;
+    position:fixed;
+    left:50%;
+    bottom:80px;
+    transform:translateX(-50%);
+    z-index:20;
+    background:rgba(0,0,0,.8);
+    padding:12px;
+    border-radius:18px;
+    text-align:center;
+}
+
+#buscadorObjetos button{
+    margin:4px;
+    padding:10px 14px;
+    border:0;
+    border-radius:12px;
+    background:#18243d;
+    color:white;
+}
+
+#objetivo{
+    display:none;
+    position:fixed;
+    left:50%;
+    top:50%;
+    transform:translate(-50%,-50%);
+    z-index:15;
+    color:white;
+    text-align:center;
+    font:700 20px Arial;
+    pointer-events:none;
+}
+
+.flechaObjetivo{
+    font-size:70px;
+    color:#58a6ff;
+    text-shadow:0 0 15px #58a6ff;
+}
+
+.encontrado{
+    color:#6cff8b;
+}
