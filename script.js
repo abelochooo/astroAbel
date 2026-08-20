@@ -29,6 +29,7 @@ let headingInicializado = false;
 // Valores bajos = más suave, pero con algo más de "inercia".
 
 const FACTOR_SUAVIZADO_HEADING = 0.15;
+const FACTOR_SUAVIZADO_PITCH = 0.25;
 
 // Calibración del horizonte: cada móvil/persona reporta "beta" distinto,
 // así que en vez de asumir un valor fijo, se calibra apuntando al horizonte.
@@ -973,10 +974,22 @@ function activarSensores() {
                         ((diferencia + 180) % 360 + 360) % 360 - 180;
 
 
+                    // Cerca del cenit el sensor se pone ruidoso: ahí
+                    // reforzamos el suavizado automáticamente. Lejos
+                    // del cenit (mirando al horizonte) apenas frena.
+
+                    const cercaniaAlCenit =
+                        Math.min(1, Math.abs(pitch) / 90);
+
+                    const factorHeadingActual =
+                        FACTOR_SUAVIZADO_HEADING *
+                        (1 - cercaniaAlCenit * 0.85);
+
+
                     heading =
                         (
                             heading +
-                            diferencia * FACTOR_SUAVIZADO_HEADING +
+                            diferencia * factorHeadingActual +
                             360
                         ) % 360;
 
@@ -1012,8 +1025,25 @@ function activarSensores() {
                         90;
 
 
-                pitch =
+                let pitchCrudo =
                     evento.beta - referencia;
+
+
+                // Límite de seguridad: cerca de ±90° (mirando casi recto
+                // hacia arriba/abajo) la brújula del móvil se vuelve
+                // inestable por sí misma (limitación física del sensor,
+                // no del código) y "tiembla". Topamos un poco antes.
+
+                pitchCrudo =
+                    Math.max(-89, Math.min(89, pitchCrudo));
+
+
+                // Suavizado, igual que con el heading, para que no
+                // se note cada pequeño salto del sensor.
+
+                pitch =
+                    pitch +
+                    (pitchCrudo - pitch) * FACTOR_SUAVIZADO_PITCH;
 
 
                 altitudElemento.textContent =
