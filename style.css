@@ -227,28 +227,27 @@ body.modo-libre #activar {
     width: 100%;
 }
 
-#buscadorObjetos{
-    display:none;
+#buscarObjeto{
     position:fixed;
     left:50%;
-    bottom:80px;
+    bottom:25px;
     transform:translateX(-50%);
-    z-index:20;
-    background:rgba(0,0,0,.8);
-    padding:12px;
-    border-radius:18px;
-    text-align:center;
+    z-index:99999;
+    padding:13px 20px;
+    border:1px solid rgba(255,255,255,.25);
+    border-radius:25px;
+    background:rgba(8,12,25,.92);
+    color:#fff;
+    font-size:16px;
+    font-weight:600;
+    box-shadow:0 4px 20px rgba(0,0,0,.5);
+    -webkit-backdrop-filter:blur(10px);
+    backdrop-filter:blur(10px);
 }
 
-#buscadorObjetos button{
-    margin:4px;
-    padding:10px 14px;
-    border:0;
-    border-radius:12px;
-    background:#18243d;
-    color:white;
+#buscarObjeto:active{
+    transform:translateX(-50%) scale(.95);
 }
-
 #objetivo{
     display:none;
     position:fixed;
