@@ -204,3 +204,34 @@ export function iniciarActualizacionPlanetas(actualizarPantalla) {
         actualizarPantalla();
     }, 30000);
 }
+
+export function calcularFaseLunar(fecha) {
+    const iluminacion = Astronomy.Illumination(
+        "Moon",
+        fecha
+    );
+
+    const elongacion =
+        Astronomy.AngleFromSun(
+            "Moon",
+            fecha
+        );
+    
+    const fase =
+    calcularFaseLunar(fecha);
+
+luna.fase =
+    fase.fraccionIluminada;
+
+luna.elongacion =
+    fase.elongacion;
+
+
+    return {
+        fraccionIluminada:
+            iluminacion.phase_fraction,
+
+        elongacion:
+            elongacion
+    };
+}

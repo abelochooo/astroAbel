@@ -905,3 +905,56 @@ export function ajustarCanvas() {
 
     actualizarPantalla();
 }
+
+function dibujarLuna(
+    ctx,
+    x,
+    y,
+    radio,
+    fraccion,
+    elongacion
+) {
+    ctx.save();
+
+    ctx.beginPath();
+    ctx.arc(
+        x,
+        y,
+        radio,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.clip();
+
+    // Parte oscura
+    ctx.fillStyle = "#151515";
+    ctx.fillRect(
+        x - radio,
+        y - radio,
+        radio * 2,
+        radio * 2
+    );
+
+    // Parte iluminada
+    const ancho =
+        radio *
+        (2 * fraccion - 1);
+
+    ctx.beginPath();
+
+    ctx.ellipse(
+        x,
+        y,
+        Math.abs(ancho),
+        radio,
+        0,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fillStyle = "#eeeeee";
+    ctx.fill();
+
+    ctx.restore();
+}
