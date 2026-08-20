@@ -86,6 +86,26 @@ body.modo-libre #camara {
     display: none;
 }
 
+/* Fondo panorámico 360 de día/noche, solo visible en modo libre
+   (en modo AR el "fondo" es la cámara real) */
+#fondoCieloLibre {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    display: none;
+
+    background-repeat: repeat-x;
+
+    /* Más alto que la pantalla, para tener margen al desplazar
+       verticalmente según hacia dónde miras (pitch) */
+    background-size: auto 150%;
+    background-position: 0% 50%;
+}
+
+body.modo-libre #fondoCieloLibre {
+    display: block;
+}
+
 body.modo-libre #cieloCamara {
     pointer-events: auto;
     cursor: grab;
