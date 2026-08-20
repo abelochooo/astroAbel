@@ -16,23 +16,14 @@ import {
     cargarViaLactea
 } from "./milkyWay.js";
 
-
 async function iniciarAplicacion() {
-
-    await cargarViaLactea(
-        "./assets/gaia-sky.jpg"
-    );
+    await cargarViaLactea("./assets/gaia-sky.jpg");
 
     ajustarCanvas();
-
     configurarUI();
-
     iniciarPantalla();
-
     iniciarCamara();
-
     actualizarPantalla();
 }
-
 
 iniciarAplicacion();

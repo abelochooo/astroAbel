@@ -19,11 +19,7 @@ export function diferenciaAngulo(a, b) {
     return ((a - b + 540) % 360) - 180;
 }
 
-export function moverSuave(
-    actual,
-    nuevo,
-    velocidad
-) {
+export function moverSuave(actual, nuevo, velocidad) {
     return normalizar(
         actual +
         diferenciaAngulo(nuevo, actual) *
