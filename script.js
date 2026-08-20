@@ -1683,6 +1683,10 @@ window.addEventListener(
 
 async function iniciarCamara() {
 
+    const errorCamaraElemento =
+        document.getElementById("errorCamara");
+
+
     try {
 
         const transmision =
@@ -1709,6 +1713,19 @@ async function iniciarCamara() {
             "Error al iniciar la cámara:",
             error
         );
+
+
+        if (errorCamaraElemento) {
+
+            errorCamaraElemento.textContent =
+                `No se pudo iniciar la cámara. ` +
+                `Tipo: ${error.name}. ` +
+                `Revisa el permiso de cámara del sitio en los ajustes del navegador.`;
+
+            errorCamaraElemento.style.display =
+                "block";
+
+        }
 
     }
 
