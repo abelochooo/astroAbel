@@ -32,12 +32,20 @@ let cuerpos = [];
 
 let modo = "ar";
 
+// Orientación de la cámara
 let heading = 0;
 let pitch = 0;
 let roll = 0;
 
+// Calibración
+let headingReferencia = null;
 let betaReferencia = null;
+
+let ultimoHeading = null;
 let ultimoBeta = null;
+let ultimoGamma = null;
+
+let sensoresActivados = false;
 
 let fovH = Number(localStorage.getItem("fovH")) || 66;
 let fovV = 50;
@@ -50,8 +58,6 @@ let inicioY = 0;
 let inicioHeading = 0;
 let inicioPitch = 0;
 
-let sensoresActivados = false;
-
 // =====================================================
 // UTILIDADES
 // =====================================================
@@ -59,7 +65,8 @@ let sensoresActivados = false;
 const rad = x => x * Math.PI / 180;
 const deg = x => x * 180 / Math.PI;
 
-const normalizar = x => ((x % 360) + 360) % 360;
+const normalizar = x =>
+    ((x % 360) + 360) % 360;
 
 function limitar(x, min, max) {
     return Math.max(min, Math.min(max, x));
@@ -95,6 +102,7 @@ function render() {
 // =====================================================
 
 function obtenerUbicacion() {
+
     if (!navigator.geolocation) {
         mostrarUbicacionError(
             "Geolocalización no disponible."
@@ -104,6 +112,7 @@ function obtenerUbicacion() {
 
     navigator.geolocation.getCurrentPosition(
         async ({ coords }) => {
+
             lat = coords.latitude;
             lon = coords.longitude;
 
@@ -111,21 +120,31 @@ function obtenerUbicacion() {
                 await obtenerCiudad(lat, lon);
 
             try {
+
                 const resultados = await Promise.all([
                     cargar("estrellas.json"),
                     cargar("constelaciones.json")
                 ]);
 
-                estrellas = resultados[0];
-                constelaciones = resultados[1];
+                estrellas = Array.isArray(resultados[0])
+                    ? resultados[0]
+                    : [];
+
+                constelaciones = Array.isArray(resultados[1])
+                    ? resultados[1]
+                    : [];
+
             } catch (error) {
+
                 console.error(
                     "Error cargando los archivos JSON:",
                     error
                 );
+
             }
 
             actualizarPlanetas();
+
             render();
 
             setInterval(actualizarPlanetas, 30000);
@@ -136,9 +155,11 @@ function obtenerUbicacion() {
         },
 
         error => {
+
             mostrarUbicacionError(
                 `Error ${error.code}: ${error.message}`
             );
+
         },
 
         {
@@ -150,7 +171,9 @@ function obtenerUbicacion() {
 }
 
 async function obtenerCiudad(lat, lon) {
+
     try {
+
         const url =
             `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`;
 
@@ -161,6 +184,7 @@ async function obtenerCiudad(lat, lon) {
         }
 
         const datos = await respuesta.json();
+
         const address = datos.address || {};
 
         const ciudad =
@@ -174,6 +198,7 @@ async function obtenerCiudad(lat, lon) {
         return `${ciudad}, ${address.country || ""}`;
 
     } catch (error) {
+
         console.error(
             "No se pudo obtener la ciudad:",
             error
@@ -184,6 +209,7 @@ async function obtenerCiudad(lat, lon) {
 }
 
 function mostrarUbicacionError(texto) {
+
     UI.mensaje.textContent =
         "No se pudo obtener tu ubicación";
 
@@ -199,6 +225,7 @@ function mostrarUbicacionError(texto) {
 // =====================================================
 
 async function cargar(archivo) {
+
     const respuesta = await fetch(archivo);
 
     if (!respuesta.ok) {
@@ -215,6 +242,7 @@ async function cargar(archivo) {
 // =====================================================
 
 function raGrados(ra) {
+
     if (typeof ra !== "string") {
         return null;
     }
@@ -235,6 +263,7 @@ function raGrados(ra) {
 }
 
 function decGrados(dec) {
+
     if (typeof dec !== "string") {
         return null;
     }
@@ -261,6 +290,7 @@ function decGrados(dec) {
 // =====================================================
 
 function tiempoSideral() {
+
     const jd =
         Date.now() / 86400000 + 2440587.5;
 
@@ -269,7 +299,8 @@ function tiempoSideral() {
 
     let gmst =
         280.46061837 +
-        360.98564736629 * (jd - 2451545.0) +
+        360.98564736629 *
+        (jd - 2451545.0) +
         0.000387933 * T * T -
         T * T * T / 38710000;
 
@@ -281,6 +312,7 @@ function tiempoSideral() {
 // =====================================================
 
 function altAz(ra, dec, lst) {
+
     let H = normalizar(lst - ra);
 
     if (H > 180) {
@@ -319,6 +351,7 @@ function altAz(ra, dec, lst) {
 // =====================================================
 
 function vector(az, alt) {
+
     az = rad(az);
     alt = rad(alt);
 
@@ -330,6 +363,7 @@ function vector(az, alt) {
 }
 
 function dot(a, b) {
+
     return (
         a.x * b.x +
         a.y * b.y +
@@ -338,6 +372,7 @@ function dot(a, b) {
 }
 
 function cross(a, b) {
+
     return {
         x: a.y * b.z - a.z * b.y,
         y: a.z * b.x - a.x * b.z,
@@ -346,6 +381,7 @@ function cross(a, b) {
 }
 
 function unit(v) {
+
     const n =
         Math.hypot(v.x, v.y, v.z) || 1;
 
@@ -361,6 +397,7 @@ function unit(v) {
 // =====================================================
 
 function baseCamara() {
+
     const forward =
         vector(heading, pitch);
 
@@ -378,6 +415,7 @@ function baseCamara() {
     if (
         Math.hypot(right.x, right.y) < 0.0001
     ) {
+
         right = unit(
             cross(
                 forward,
@@ -394,10 +432,11 @@ function baseCamara() {
         cross(right, forward)
     );
 
-    // Roll
+    // Aplicar roll
     const r = rad(roll);
 
-    if (roll !== 0) {
+    if (Math.abs(roll) > 0.001) {
+
         const oldRight = { ...right };
         const oldUp = { ...up };
 
@@ -450,6 +489,7 @@ function proyectar(
     cx,
     cy
 ) {
+
     const p = vector(az, alt);
 
     const frente =
@@ -503,6 +543,7 @@ const planetas = [
 ];
 
 function actualizarPlanetas() {
+
     if (
         lat === undefined ||
         lon === undefined ||
@@ -522,7 +563,9 @@ function actualizarPlanetas() {
 
     cuerpos = planetas
         .map(([body, nombre]) => {
+
             try {
+
                 const e =
                     Astronomy.Equator(
                         Astronomy.Body[body],
@@ -548,6 +591,7 @@ function actualizarPlanetas() {
                 };
 
             } catch (error) {
+
                 console.error(
                     `Error calculando ${nombre}:`,
                     error
@@ -555,6 +599,7 @@ function actualizarPlanetas() {
 
                 return null;
             }
+
         })
         .filter(Boolean);
 
@@ -573,7 +618,9 @@ function dibujarEstrellas(
     cx,
     cy
 ) {
+
     for (const estrella of estrellas) {
+
         const ra =
             raGrados(estrella.RA);
 
@@ -659,6 +706,7 @@ function dibujarConstelaciones(
     cx,
     cy
 ) {
+
     ctx.strokeStyle =
         "rgba(120,170,255,.55)";
 
@@ -671,11 +719,11 @@ function dibujarConstelaciones(
         "rgba(180,210,255,.75)";
 
     for (const c of constelaciones) {
+
         let nombrePunto = null;
 
-        for (
-            const linea of c.lineas || []
-        ) {
+        for (const linea of c.lineas || []) {
+
             ctx.beginPath();
 
             let dibujado = false;
@@ -685,6 +733,7 @@ function dibujarConstelaciones(
                 i < linea.length - 1;
                 i++
             ) {
+
                 const p1 = linea[i];
                 const p2 = linea[i + 1];
 
@@ -751,6 +800,7 @@ function dibujarConstelaciones(
         }
 
         if (nombrePunto) {
+
             ctx.fillText(
                 c.nombre || "",
                 nombrePunto.x + 6,
@@ -771,6 +821,7 @@ function dibujarCuerpos(
     cx,
     cy
 ) {
+
     ctx.textAlign = "center";
     ctx.font = "13px Arial";
 
@@ -795,6 +846,7 @@ function dibujarCuerpos(
     };
 
     for (const cuerpo of cuerpos) {
+
         const p =
             proyectar(
                 cuerpo.az,
@@ -847,6 +899,7 @@ function dibujarCuerpos(
 // =====================================================
 
 function dibujarCielo() {
+
     if (
         lat === undefined ||
         lon === undefined
@@ -886,6 +939,7 @@ function dibujarCielo() {
         );
 
     if (constelaciones.length) {
+
         dibujarConstelaciones(
             lst,
             base,
@@ -915,10 +969,60 @@ function dibujarCielo() {
 }
 
 // =====================================================
-// SENSORES
+// ORIENTACIÓN DEL DISPOSITIVO
 // =====================================================
 
+function obtenerOrientacionPantalla() {
+
+    if (
+        screen.orientation &&
+        typeof screen.orientation.angle === "number"
+    ) {
+        return screen.orientation.angle;
+    }
+
+    return window.orientation || 0;
+}
+
+function obtenerHeadingSensor(evento) {
+
+    // iOS proporciona directamente el rumbo de brújula.
+    if (
+        typeof evento.webkitCompassHeading === "number" &&
+        Number.isFinite(evento.webkitCompassHeading)
+    ) {
+        return normalizar(
+            evento.webkitCompassHeading
+        );
+    }
+
+    // Android / otros navegadores.
+    if (
+        typeof evento.alpha !== "number" ||
+        !Number.isFinite(evento.alpha)
+    ) {
+        return null;
+    }
+
+    let h = 360 - evento.alpha;
+
+    const orientacion =
+        obtenerOrientacionPantalla();
+
+    // Ajuste por orientación física de la pantalla.
+    if (orientacion === 90) {
+        h += 90;
+    } else if (orientacion === -90 || orientacion === 270) {
+        h -= 90;
+    } else if (orientacion === 180) {
+        h += 180;
+    }
+
+    return normalizar(h);
+}
+
 function activarSensores() {
+
     if (sensoresActivados) {
         return;
     }
@@ -927,93 +1031,122 @@ function activarSensores() {
 
     window.addEventListener(
         "deviceorientation",
-        e => {
-            if (modo !== "ar") {
-                return;
-            }
-
-            const alpha = e.alpha;
-            const beta = e.beta;
-            const gamma = e.gamma;
-
-            if (
-                alpha === null ||
-                beta === null ||
-                gamma === null
-            ) {
-                return;
-            }
-
-            ultimoBeta = beta;
-
-            let nuevoHeading;
-
-            if (
-                typeof e.webkitCompassHeading ===
-                "number"
-            ) {
-                nuevoHeading =
-                    e.webkitCompassHeading;
-            } else {
-                nuevoHeading =
-                    360 - alpha;
-            }
-
-            nuevoHeading =
-                normalizar(nuevoHeading);
-
-            const referencia =
-                betaReferencia ?? 90;
-
-            const nuevoPitch =
-                limitar(
-                    beta - referencia,
-                    -89,
-                    89
-                );
-
-            const nuevoRoll =
-                limitar(
-                    gamma,
-                    -90,
-                    90
-                );
-
-            heading =
-                suavizarAngulo(
-                    heading,
-                    nuevoHeading,
-                    0.2
-                );
-
-            pitch +=
-                (nuevoPitch - pitch) *
-                0.2;
-
-            roll +=
-                (nuevoRoll - roll) *
-                0.15;
-
-            UI.direccion.textContent =
-                `${heading.toFixed(1)}°`;
-
-            UI.altitud.textContent =
-                `${pitch.toFixed(1)}°` +
-                (
-                    betaReferencia === null
-                        ? " (sin calibrar)"
-                        : ""
-                );
-
-            UI.debug.textContent =
-                `α:${alpha.toFixed(0)} ` +
-                `β:${beta.toFixed(0)} ` +
-                `γ:${gamma.toFixed(0)}`;
-
-            render();
-        },
+        manejarOrientacion,
         true
     );
+
+    UI.activar.textContent =
+        "Sensores activados";
+}
+
+function manejarOrientacion(e) {
+
+    if (modo !== "ar") {
+        return;
+    }
+
+    const alpha = e.alpha;
+    const beta = e.beta;
+    const gamma = e.gamma;
+
+    if (
+        alpha === null ||
+        beta === null ||
+        gamma === null
+    ) {
+        return;
+    }
+
+    ultimoBeta = beta;
+    ultimoGamma = gamma;
+
+    const nuevoHeading =
+        obtenerHeadingSensor(e);
+
+    if (nuevoHeading === null) {
+        return;
+    }
+
+    ultimoHeading = nuevoHeading;
+
+    // Si nunca se ha calibrado el pitch,
+    // usamos la posición actual como referencia.
+    if (betaReferencia === null) {
+        betaReferencia = beta;
+    }
+
+    // Si nunca se ha calibrado el heading,
+    // conservamos el rumbo absoluto de la brújula.
+    if (headingReferencia === null) {
+        headingReferencia = nuevoHeading;
+    }
+
+    /*
+     * HEADING
+     *
+     * Usamos la diferencia respecto a la calibración.
+     * Esto permite pulsar "Calibrar" y tomar ese punto
+     * como centro de la vista.
+     */
+    const headingCalibrado =
+        normalizar(
+            nuevoHeading -
+            headingReferencia
+        );
+
+    /*
+     * PITCH
+     */
+    const nuevoPitch =
+        limitar(
+            beta - betaReferencia,
+            -89,
+            89
+        );
+
+    /*
+     * ROLL
+     *
+     * En algunos dispositivos gamma cambia de signo
+     * según la orientación. Lo mantenemos limitado.
+     */
+    const nuevoRoll =
+        limitar(
+            gamma,
+            -90,
+            90
+        );
+
+    // Suavizado
+    heading =
+        suavizarAngulo(
+            heading,
+            headingCalibrado,
+            0.18
+        );
+
+    pitch +=
+        (nuevoPitch - pitch) * 0.18;
+
+    roll +=
+        (nuevoRoll - roll) * 0.12;
+
+    // UI
+    UI.direccion.textContent =
+        `${normalizar(
+            heading
+        ).toFixed(1)}°`;
+
+    UI.altitud.textContent =
+        `${pitch.toFixed(1)}°`;
+
+    UI.debug.textContent =
+        `α:${alpha.toFixed(0)} ` +
+        `β:${beta.toFixed(0)} ` +
+        `γ:${gamma.toFixed(0)} ` +
+        `rumbo:${nuevoHeading.toFixed(1)}`;
+
+    render();
 }
 
 // =====================================================
@@ -1021,7 +1154,12 @@ function activarSensores() {
 // =====================================================
 
 function calibrar() {
-    if (ultimoBeta === null) {
+
+    if (
+        ultimoBeta === null ||
+        ultimoHeading === null
+    ) {
+
         alert(
             "Activa los sensores primero."
         );
@@ -1029,13 +1167,29 @@ function calibrar() {
         return;
     }
 
+    /*
+     * Guardamos la orientación actual como
+     * nueva referencia.
+     */
+
     betaReferencia =
         ultimoBeta;
 
+    headingReferencia =
+        ultimoHeading;
+
+    heading = 0;
     pitch = 0;
+    roll = 0;
+
+    UI.direccion.textContent =
+        "0.0°";
 
     UI.altitud.textContent =
-        "0°";
+        "0.0°";
+
+    UI.debug.textContent =
+        "Calibrado";
 
     render();
 }
@@ -1045,6 +1199,7 @@ function calibrar() {
 // =====================================================
 
 function actualizarFOV() {
+
     if (!innerWidth) {
         return;
     }
@@ -1063,6 +1218,7 @@ function actualizarFOV() {
 }
 
 if (UI.fov) {
+
     UI.fov.value = fovH;
 
     actualizarFOV();
@@ -1070,6 +1226,7 @@ if (UI.fov) {
     UI.fov.addEventListener(
         "input",
         () => {
+
             fovH =
                 Number(UI.fov.value);
 
@@ -1080,8 +1237,10 @@ if (UI.fov) {
 
             actualizarFOV();
 
-            UI.fovTexto.textContent =
-                `${fovH}°`;
+            if (UI.fovTexto) {
+                UI.fovTexto.textContent =
+                    `${fovH}°`;
+            }
 
             render();
         }
@@ -1089,6 +1248,7 @@ if (UI.fov) {
 }
 
 if (UI.fovTexto) {
+
     UI.fovTexto.textContent =
         `${fovH}°`;
 }
@@ -1098,6 +1258,7 @@ if (UI.fovTexto) {
 // =====================================================
 
 function cambiarModo() {
+
     modo =
         modo === "ar"
             ? "libre"
@@ -1123,6 +1284,7 @@ function cambiarModo() {
 canvas.addEventListener(
     "pointerdown",
     e => {
+
         if (modo !== "libre") {
             return;
         }
@@ -1150,6 +1312,7 @@ canvas.addEventListener(
 canvas.addEventListener(
     "pointermove",
     e => {
+
         if (!arrastrando) {
             return;
         }
@@ -1196,10 +1359,12 @@ window.addEventListener(
 // =====================================================
 
 async function iniciarCamara() {
+
     if (
         !navigator.mediaDevices ||
         !navigator.mediaDevices.getUserMedia
     ) {
+
         UI.error.textContent =
             "La cámara no está disponible en este navegador.";
 
@@ -1210,6 +1375,7 @@ async function iniciarCamara() {
     }
 
     try {
+
         const stream =
             await navigator.mediaDevices.getUserMedia({
                 video: {
@@ -1223,9 +1389,17 @@ async function iniciarCamara() {
         UI.camara.srcObject =
             stream;
 
-        UI.camara.play?.();
+        UI.camara.setAttribute(
+            "playsinline",
+            ""
+        );
+
+        UI.camara.muted = true;
+
+        await UI.camara.play();
 
     } catch (e) {
+
         console.error(
             "Error de cámara:",
             e
@@ -1243,57 +1417,100 @@ async function iniciarCamara() {
 // EVENTOS
 // =====================================================
 
-UI.activar.addEventListener(
-    "click",
-    async () => {
-        try {
-            if (
-                typeof DeviceOrientationEvent !==
+if (UI.activar) {
+
+    UI.activar.addEventListener(
+        "click",
+        async () => {
+
+            try {
+
+                /*
+                 * iOS requiere permiso explícito
+                 * para DeviceOrientation.
+                 */
+
+                if (
+                    typeof DeviceOrientationEvent !==
                     "undefined" &&
-                typeof DeviceOrientationEvent.requestPermission ===
+                    typeof DeviceOrientationEvent.requestPermission ===
                     "function"
-            ) {
-                const permiso =
-                    await DeviceOrientationEvent
-                        .requestPermission();
+                ) {
 
-                if (permiso !== "granted") {
-                    UI.debug.textContent =
-                        "Permiso de sensores denegado.";
+                    const permiso =
+                        await DeviceOrientationEvent
+                            .requestPermission();
 
-                    return;
+                    if (permiso !== "granted") {
+
+                        UI.debug.textContent =
+                            "Permiso de sensores denegado.";
+
+                        return;
+                    }
                 }
+
+                activarSensores();
+
+            } catch (e) {
+
+                console.error(e);
+
+                UI.debug.textContent =
+                    "No se pudieron activar los sensores.";
             }
-
-            activarSensores();
-
-            UI.activar.textContent =
-                "Sensores activados";
-
-        } catch (e) {
-            console.error(e);
-
-            UI.debug.textContent =
-                "No se pudieron activar los sensores.";
         }
-    }
-);
+    );
+}
 
-UI.calibrar.addEventListener(
-    "click",
-    calibrar
-);
+if (UI.calibrar) {
 
-UI.modo.addEventListener(
-    "click",
-    cambiarModo
-);
+    UI.calibrar.addEventListener(
+        "click",
+        calibrar
+    );
+}
+
+if (UI.modo) {
+
+    UI.modo.addEventListener(
+        "click",
+        cambiarModo
+    );
+}
+
+// =====================================================
+// CAMBIO DE ORIENTACIÓN
+// =====================================================
+
+function manejarCambioOrientacion() {
+
+    actualizarFOV();
+
+    render();
+}
+
+if (screen.orientation) {
+
+    screen.orientation.addEventListener(
+        "change",
+        manejarCambioOrientacion
+    );
+
+} else {
+
+    window.addEventListener(
+        "orientationchange",
+        manejarCambioOrientacion
+    );
+}
 
 // =====================================================
 // RESIZE / CANVAS
 // =====================================================
 
 function ajustarCanvas() {
+
     const dpr =
         Math.min(
             window.devicePixelRatio || 1,
@@ -1332,34 +1549,61 @@ window.addEventListener(
 );
 
 // =====================================================
+// LIMPIAR CÁMARA AL SALIR
+// =====================================================
+
+window.addEventListener(
+    "beforeunload",
+    () => {
+
+        const stream =
+            UI.camara?.srcObject;
+
+        if (stream) {
+
+            stream.getTracks().forEach(
+                track => track.stop()
+            );
+        }
+    }
+);
+
+// =====================================================
 // INICIO
 // =====================================================
 
 function escribir() {
+
     const texto =
         "Tu ubicación es";
 
     let i = 0;
 
-    UI.mensaje.textContent = "";
+    UI.mensaje.textContent =
+        "";
 
     const timer =
-        setInterval(() => {
-            if (i >= texto.length) {
-                clearInterval(timer);
+        setInterval(
+            () => {
 
-                obtenerUbicacion();
+                if (i >= texto.length) {
 
-                return;
-            }
+                    clearInterval(timer);
 
-            UI.mensaje.textContent +=
-                texto[i++];
+                    obtenerUbicacion();
 
-        }, 60);
+                    return;
+                }
+
+                UI.mensaje.textContent +=
+                    texto[i++];
+
+            },
+            60
+        );
 }
 
-// Inicializar canvas inmediatamente
+// Inicializar canvas
 ajustarCanvas();
 
 // Comenzar aplicación
