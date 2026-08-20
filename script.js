@@ -151,6 +151,10 @@ async function obtenerUbicacion() {
 
             cargarConstelaciones();
 
+            actualizarCuerposCelestes();
+
+            setInterval(actualizarCuerposCelestes, 30000);
+
 
             setTimeout(() => {
 
@@ -598,6 +602,95 @@ function baseCamara(headingDeg, pitchDeg) {
 
 
 // =====================================================
+// SOL, LUNA Y PLANETAS
+// =====================================================
+
+let cuerpos = [];
+
+const CUERPOS_A_MOSTRAR = [
+    { body: "Sun", nombre: "Sol" },
+    { body: "Moon", nombre: "Luna" },
+    { body: "Mercury", nombre: "Mercurio" },
+    { body: "Venus", nombre: "Venus" },
+    { body: "Mars", nombre: "Marte" },
+    { body: "Jupiter", nombre: "Júpiter" },
+    { body: "Saturn", nombre: "Saturno" }
+];
+
+
+function actualizarCuerposCelestes() {
+
+    if (
+        latitud === undefined ||
+        longitud === undefined
+    ) {
+        return;
+    }
+
+    if (typeof Astronomy === "undefined") {
+        return;
+    }
+
+
+    const ahora =
+        new Date();
+
+    const observador =
+        new Astronomy.Observer(latitud, longitud, 0);
+
+
+    cuerpos =
+        CUERPOS_A_MOSTRAR
+            .map(({ body, nombre }) => {
+
+                try {
+
+                    const ecuatorial =
+                        Astronomy.Equator(
+                            Astronomy.Body[body],
+                            ahora,
+                            observador,
+                            true,
+                            true
+                        );
+
+                    const horizonte =
+                        Astronomy.Horizon(
+                            ahora,
+                            observador,
+                            ecuatorial.ra,
+                            ecuatorial.dec,
+                            "normal"
+                        );
+
+                    return {
+                        nombre,
+                        esLuna: nombre === "Luna",
+                        azimut: horizonte.azimuth,
+                        altitud: horizonte.altitude
+                    };
+
+                } catch (error) {
+
+                    console.error(
+                        "Error calculando posición de " + nombre,
+                        error
+                    );
+
+                    return null;
+
+                }
+
+            })
+            .filter(Boolean);
+
+
+    dibujarCielo();
+
+}
+
+
+// =====================================================
 // PROYECTAR PUNTO (RA/Dec en grados → x, y en pantalla)
 // =====================================================
 // Proyección gnomónica (rectilínea): mucho más fiel que una
@@ -609,14 +702,31 @@ function proyectarPunto(ra, dec, lst, base, focalH, focalV, centroX, centroY) {
     const posicion =
         estrellaAltAz(ra, dec, lst);
 
+    return proyectarAltAz(
+        posicion.azimut,
+        posicion.altitud,
+        base,
+        focalH,
+        focalV,
+        centroX,
+        centroY
+    );
 
-    if (posicion.altitud <= 0) {
+}
+
+
+// Igual que proyectarPunto, pero para cuando ya tienes azimut/altitud
+// calculados directamente (caso de Sol, Luna y planetas vía astronomy-engine).
+
+function proyectarAltAz(azimut, altitud, base, focalH, focalV, centroX, centroY) {
+
+    if (altitud <= 0) {
         return null;
     }
 
 
     const punto =
-        azAltAVector(posicion.azimut, posicion.altitud);
+        azAltAVector(azimut, altitud);
 
 
     const pf =
@@ -1414,6 +1524,73 @@ function dibujarCielo() {
         ctx.fill();
 
     }
+
+
+    // =================================================
+    // SOL, LUNA Y PLANETAS (encima de todo lo demás)
+    // =================================================
+
+    ctx.textAlign = "center";
+    ctx.font = "13px Arial, sans-serif";
+
+
+    for (const cuerpo of cuerpos) {
+
+        const p =
+            proyectarAltAz(
+                cuerpo.azimut,
+                cuerpo.altitud,
+                base,
+                focalH,
+                focalV,
+                centroX,
+                centroY
+            );
+
+
+        if (!p) {
+            continue;
+        }
+
+
+        const radio =
+            cuerpo.esLuna ? 14 : 6;
+
+        const color =
+            cuerpo.esLuna ? "#e8e8e0" : "#ffd27f";
+
+
+        // Disco del cuerpo
+
+        ctx.beginPath();
+
+        ctx.arc(
+            p.x,
+            p.y,
+            radio,
+            0,
+            Math.PI * 2
+        );
+
+        ctx.fillStyle = color;
+
+        ctx.fill();
+
+
+        // Nombre encima
+
+        ctx.fillStyle = "rgba(255,255,255,0.9)";
+
+        ctx.fillText(
+            cuerpo.nombre,
+            p.x,
+            p.y - radio - 6
+        );
+
+    }
+
+
+    ctx.textAlign = "left";
 
 }
 
