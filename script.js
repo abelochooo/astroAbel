@@ -23,6 +23,12 @@ let constelaciones = [];
 let heading = 0;
 let pitch = 0;
 
+// Calibración del horizonte: cada móvil/persona reporta "beta" distinto,
+// así que en vez de asumir un valor fijo, se calibra apuntando al horizonte.
+
+let referenciaBeta = null;
+let ultimoBetaCrudo = null;
+
 const FOV_HORIZONTAL = 90;
 const FOV_VERTICAL = 60;
 
@@ -839,18 +845,27 @@ function activarSensores() {
                 !Number.isNaN(evento.beta)
             ) {
 
-                // 'beta' es la inclinación física del móvil (0 = tumbado
-                // en la mesa mirando al cenit, 90 = vertical mirando al
-                // horizonte, 180 = boca abajo mirando al suelo).
-                // La elevación real de la cámara es su complementario:
+                ultimoBetaCrudo =
+                    evento.beta;
+
+
+                // Hasta que el usuario calibre, usamos 90 como
+                // referencia provisional (puede estar bastante desviada).
+
+                const referencia =
+                    referenciaBeta !== null ?
+                        referenciaBeta :
+                        90;
+
 
                 pitch =
-                    90 - evento.beta;
+                    evento.beta - referencia;
 
 
                 altitudElemento.textContent =
                     pitch.toFixed(1) +
-                    "°";
+                    "°" +
+                    (referenciaBeta === null ? " (sin calibrar)" : "");
 
             }
 
@@ -859,6 +874,52 @@ function activarSensores() {
 
         },
         true
+    );
+
+}
+
+
+// =====================================================
+// CALIBRAR HORIZONTE
+// =====================================================
+// El usuario sostiene el móvil apuntando al horizonte real
+// y pulsa este botón: guardamos el beta de ese instante como
+// el "cero" a partir del cual se mide la elevación.
+
+function calibrarHorizonte() {
+
+    if (ultimoBetaCrudo === null) {
+
+        alert(
+            "Activa primero los sensores y mueve el móvil un poco."
+        );
+
+        return;
+
+    }
+
+
+    referenciaBeta =
+        ultimoBetaCrudo;
+
+
+    console.log(
+        "📐 Horizonte calibrado con beta =",
+        referenciaBeta
+    );
+
+}
+
+
+const botonCalibrar =
+    document.getElementById("calibrar");
+
+
+if (botonCalibrar) {
+
+    botonCalibrar.addEventListener(
+        "click",
+        calibrarHorizonte
     );
 
 }
