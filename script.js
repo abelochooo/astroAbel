@@ -1,647 +1,1043 @@
-// =====================================================
-// ELEMENTOS DEL DOM
-// =====================================================
-const texto1 = document.getElementById("ubicacionMensaje");
-const ubicacion = document.getElementById("ubicacionUsuario");
-const ubicacionDiv = document.getElementById("ubicacionDiv");
-
-const canvas = document.getElementById("cieloCamara");
+const $ = id => document.getElementById(id);
+const canvas = $("cieloCamara");
 const ctx = canvas.getContext("2d");
 
-const direccionElemento = document.getElementById("direccion");
-const altitudElemento = document.getElementById("altitud");
-const debugElemento = document.getElementById("debug");
+const UI = {
+    mensaje: $("ubicacionMensaje"),
+    ubicacion: $("ubicacionUsuario"),
+    pantalla: $("ubicacionDiv"),
+    direccion: $("direccion"),
+    altitud: $("altitud"),
+    debug: $("debug"),
+    camara: $("camara"),
+    error: $("errorCamara"),
+    activar: $("activar"),
+    calibrar: $("calibrar"),
+    modo: $("modoBoton"),
+    fov: $("fovSlider"),
+    fovTexto: $("fovValor")
+};
+
 
 // =====================================================
-// ESTADO GLOBAL
+// ESTADO
 // =====================================================
-let latitud, longitud;
+
+let lat, lon;
 let estrellas = [];
 let constelaciones = [];
-let cuerpos = []; // sol, luna, planetas
+let cuerpos = [];
 
-// Orientación
-let heading = 0;
-let pitch = 0;
-let headingInicializado = false;
-
-const FACTOR_SUAVIZADO_HEADING = 0.15;
-const FACTOR_SUAVIZADO_PITCH = 0.25;
-
-// Calibración del horizonte (cada móvil da un "beta" distinto en reposo)
-let referenciaBeta = null;
-let ultimoBetaCrudo = null;
-
-// Campo de visión (varía según el móvil, se ajusta con el slider y se recuerda)
-const RELACION_FOV = 50 / 66;
-let FOV_HORIZONTAL = Number(localStorage.getItem("fovHorizontal")) || 66;
-let FOV_VERTICAL = Number(localStorage.getItem("fovVertical")) || 50;
-
-// "ar" = cámara real + sensores | "libre" = arrastrar con el dedo/ratón
 let modo = "ar";
 
-// Arrastre (modo libre)
+let heading = 0;
+let pitch = 0;
+let roll = 0;
+
+let betaReferencia = null;
+let ultimoBeta = null;
+
+let fovH = Number(localStorage.fovH) || 66;
+let fovV = 50;
+
+let renderPendiente = false;
+
 let arrastrando = false;
-let arrastreInicioX = 0;
-let arrastreInicioY = 0;
-let headingAlIniciar = 0;
-let pitchAlIniciar = 0;
+let inicioX = 0;
+let inicioY = 0;
+let inicioHeading = 0;
+let inicioPitch = 0;
 
-const CUERPOS_A_MOSTRAR = [
-    { body: "Sun", nombre: "Sol" },
-    { body: "Moon", nombre: "Luna" },
-    { body: "Mercury", nombre: "Mercurio" },
-    { body: "Venus", nombre: "Venus" },
-    { body: "Mars", nombre: "Marte" },
-    { body: "Jupiter", nombre: "Júpiter" },
-    { body: "Saturn", nombre: "Saturno" }
-];
 
 // =====================================================
-// EFECTO DE ESCRITURA INICIAL
+// UTILIDADES
 // =====================================================
-function escribir() {
-    const texto = "Tu ubicación es";
-    let i = 0;
 
-    const intervalo = setInterval(() => {
-        if (i >= texto.length) {
-            clearInterval(intervalo);
-            obtenerUbicacion();
-            return;
-        }
-        texto1.textContent += texto[i];
-        i++;
-    }, 100);
+const rad = x => x * Math.PI / 180;
+const deg = x => x * 180 / Math.PI;
+
+const normalizar = x => ((x % 360) + 360) % 360;
+
+function limitar(x, min, max) {
+    return Math.max(min, Math.min(max, x));
 }
+
+function diferenciaAngular(a, b) {
+    return ((a - b + 540) % 360) - 180;
+}
+
+function suavizarAngulo(actual, nuevo, factor) {
+    return normalizar(
+        actual + diferenciaAngular(nuevo, actual) * factor
+    );
+}
+
+
+// =====================================================
+// RENDER
+// =====================================================
+
+function render() {
+    if (renderPendiente) return;
+
+    renderPendiente = true;
+
+    requestAnimationFrame(() => {
+        renderPendiente = false;
+        dibujarCielo();
+    });
+}
+
 
 // =====================================================
 // UBICACIÓN
 // =====================================================
-async function obtenerUbicacion() {
+
+function obtenerUbicacion() {
+    if (!navigator.geolocation) {
+        mostrarUbicacionError("Geolocalización no disponible.");
+        return;
+    }
+
     navigator.geolocation.getCurrentPosition(
-        onUbicacionOk,
-        onUbicacionError,
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        async ({ coords }) => {
+            lat = coords.latitude;
+            lon = coords.longitude;
+
+            UI.ubicacion.textContent =
+                await obtenerCiudad(lat, lon);
+
+            await Promise.all([
+                cargar("estrellas.json").then(x => estrellas = x),
+                cargar("constelaciones.json").then(x => constelaciones = x)
+            ]);
+
+            actualizarPlanetas();
+            render();
+
+            setInterval(actualizarPlanetas, 30000);
+
+            setTimeout(() => UI.pantalla?.remove(), 2500);
+        },
+        error => {
+            mostrarUbicacionError(
+                `Error ${error.code}: ${error.message}`
+            );
+        },
+        {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 0
+        }
     );
 }
 
-async function onUbicacionOk({ coords }) {
-    latitud = coords.latitude;
-    longitud = coords.longitude;
-
-    ubicacion.textContent = await obtenerNombreCiudad(latitud, longitud);
-
-    cargarEstrellas();
-    cargarConstelaciones();
-
-    actualizarCuerposCelestes();
-    setInterval(actualizarCuerposCelestes, 30000);
-
-    setTimeout(() => ubicacionDiv?.remove(), 3000);
-}
-
-function onUbicacionError(error) {
-    console.error("Error de ubicación:", error);
-
-    if (texto1) texto1.textContent = "No se pudo obtener tu ubicación";
-    if (ubicacion) ubicacion.textContent = `Código de error: ${error.code} - ${error.message}`;
-
-    setTimeout(() => ubicacionDiv?.remove(), 3000);
-}
-
-async function obtenerNombreCiudad(lat, lon) {
+async function obtenerCiudad(lat, lon) {
     try {
-        const respuesta = await fetch(
+        const r = await fetch(
             `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`
         );
-        if (!respuesta.ok) throw new Error(`HTTP ${respuesta.status}`);
 
-        const { address } = await respuesta.json();
-        const ciudad = address.city || address.town || address.village || address.municipality || "Ubicación desconocida";
+        const { address } = await r.json();
 
-        return `${ciudad}, ${address.country}`;
-    } catch (error) {
-        console.error("Error obteniendo ciudad:", error);
+        const ciudad =
+            address.city ||
+            address.town ||
+            address.village ||
+            address.municipality ||
+            "Ubicación desconocida";
+
+        return `${ciudad}, ${address.country || ""}`;
+
+    } catch {
         return "Ubicación obtenida";
     }
 }
 
-// =====================================================
-// CARGA DE DATOS (estrellas / constelaciones)
-// =====================================================
-async function cargarJSON(archivo) {
-    const respuesta = await fetch(archivo);
-    if (!respuesta.ok) throw new Error(`HTTP ${respuesta.status}`);
-    return respuesta.json();
+function mostrarUbicacionError(texto) {
+    UI.mensaje.textContent = "No se pudo obtener tu ubicación";
+    UI.ubicacion.textContent = texto;
+
+    setTimeout(() => UI.pantalla?.remove(), 2500);
 }
 
-async function cargarEstrellas() {
-    try {
-        estrellas = await cargarJSON("estrellas.json");
-        console.log("⭐ Estrellas cargadas:", estrellas.length);
-        redimensionarCanvas();
-        dibujarCielo();
-    } catch (error) {
-        console.error("Error cargando estrellas:", error);
+
+// =====================================================
+// JSON
+// =====================================================
+
+async function cargar(archivo) {
+    const r = await fetch(archivo);
+
+    if (!r.ok) {
+        throw new Error(`No se pudo cargar ${archivo}`);
     }
+
+    return r.json();
 }
 
-async function cargarConstelaciones() {
-    try {
-        constelaciones = await cargarJSON("constelaciones.json");
-        console.log("✨ Constelaciones cargadas:", constelaciones.length);
-        dibujarCielo();
-    } catch (error) {
-        console.error("Error cargando constelaciones:", error);
-    }
-}
 
 // =====================================================
-// CONVERSIÓN DE COORDENADAS (RA / Dec en texto → grados)
+// RA / DEC
 // =====================================================
-function raAGrados(ra) {
-    const partes = ra?.match(/(\d+)h\s*(\d+)m\s*([\d.]+)s/);
-    if (!partes) return null;
 
-    const [, horas, minutos, segundos] = partes.map(Number);
-    return (horas + minutos / 60 + segundos / 3600) * 15;
+function raGrados(ra) {
+    const p = ra?.match(/(\d+)h\s*(\d+)m\s*([\d.]+)s/i);
+
+    if (!p) return null;
+
+    return (
+        Number(p[1]) +
+        Number(p[2]) / 60 +
+        Number(p[3]) / 3600
+    ) * 15;
 }
 
-function decAGrados(dec) {
-    const patron = /([+-])(\d+)[°º]\s*(\d+)[′']\s*(\d+(?:\.\d+)?)[″"]/;
-    const partes = dec?.match(/([+-])(\d+)°\s*(\d+)′\s*(\d+(?:\.\d+)?)″/) || dec?.match(patron);
-    if (!partes) return null;
-
-    const signo = partes[1] === "-" ? -1 : 1;
-    const [, , grados, minutos, segundos] = partes.map(Number);
-
-    return signo * (grados + minutos / 60 + segundos / 3600);
-}
-
-// =====================================================
-// TIEMPO SIDERAL Y POSICIÓN EN EL CIELO
-// =====================================================
-function tiempoSideral() {
-    if (latitud === undefined || longitud === undefined) return 0;
-
-    const jd = Date.now() / 86400000 + 2440587.5;
-    const T = (jd - 2451545.0) / 36525;
-
-    let gmst = 280.46061837 + 360.98564736629 * (jd - 2451545.0)
-        + 0.000387933 * T * T - (T * T * T) / 38710000;
-
-    gmst = ((gmst % 360) + 360) % 360;
-
-    return ((gmst + longitud) % 360 + 360) % 360;
-}
-
-function estrellaAltAz(ra, dec, lst) {
-    let H = ((lst - ra + 180) % 360 + 360) % 360 - 180;
-
-    const lat = latitud * Math.PI / 180;
-    const decl = dec * Math.PI / 180;
-    const hora = H * Math.PI / 180;
-
-    const sinAlt = Math.sin(lat) * Math.sin(decl) + Math.cos(lat) * Math.cos(decl) * Math.cos(hora);
-    const alt = Math.asin(Math.max(-1, Math.min(1, sinAlt)));
-
-    const az = Math.atan2(
-        Math.sin(hora),
-        Math.cos(hora) * Math.sin(lat) - Math.tan(decl) * Math.cos(lat)
+function decGrados(dec) {
+    const p = dec?.match(
+        /([+-])\s*(\d+)[°º]\s*(\d+)[′']\s*(\d+(?:\.\d+)?)[″"]/u
     );
 
-    const azDeg = ((az * 180 / Math.PI + 180) % 360 + 360) % 360;
+    if (!p) return null;
 
-    return { azimut: azDeg, altitud: alt * 180 / Math.PI };
+    const signo = p[1] === "-" ? -1 : 1;
+
+    return signo * (
+        Number(p[2]) +
+        Number(p[3]) / 60 +
+        Number(p[4]) / 3600
+    );
 }
+
 
 // =====================================================
-// VECTORES 3D (proyección gnomónica: x=este, y=norte, z=cenit)
+// TIEMPO SIDERAL
 // =====================================================
-function azAltAVector(azimutDeg, altitudDeg) {
-    const az = azimutDeg * Math.PI / 180;
-    const alt = altitudDeg * Math.PI / 180;
-    const cosAlt = Math.cos(alt);
 
-    return { x: cosAlt * Math.sin(az), y: cosAlt * Math.cos(az), z: Math.sin(alt) };
+function tiempoSideral() {
+    const jd = Date.now() / 86400000 + 2440587.5;
+    const T = (jd - 2451545) / 36525;
+
+    let gmst =
+        280.46061837 +
+        360.98564736629 * (jd - 2451545) +
+        0.000387933 * T * T -
+        T * T * T / 38710000;
+
+    return normalizar(gmst + lon);
 }
 
-const producto = (a, b) => a.x * b.x + a.y * b.y + a.z * b.z;
 
-const cruz = (a, b) => ({
-    x: a.y * b.z - a.z * b.y,
-    y: a.z * b.x - a.x * b.z,
-    z: a.x * b.y - a.y * b.x
-});
+// =====================================================
+// RA / DEC → ALT / AZ
+// =====================================================
 
-function normalizar(v) {
-    const longitud = Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z) || 1;
-    return { x: v.x / longitud, y: v.y / longitud, z: v.z / longitud };
+function altAz(ra, dec, lst) {
+    let H = normalizar(lst - ra);
+
+    if (H > 180) H -= 360;
+
+    const L = rad(lat);
+    const D = rad(dec);
+    const h = rad(H);
+
+    const alt = Math.asin(
+        limitar(
+            Math.sin(L) * Math.sin(D) +
+            Math.cos(L) * Math.cos(D) * Math.cos(h),
+            -1,
+            1
+        )
+    );
+
+    const az = Math.atan2(
+        Math.sin(h),
+        Math.cos(h) * Math.sin(L) -
+        Math.tan(D) * Math.cos(L)
+    );
+
+    return {
+        az: normalizar(deg(az) + 180),
+        alt: deg(alt)
+    };
 }
 
-// Base ortonormal de la cámara (hacia dónde mira, su derecha y su arriba)
-function baseCamara(headingDeg, pitchDeg) {
-    const forward = azAltAVector(headingDeg, pitchDeg);
-    let right = normalizar(cruz(forward, { x: 0, y: 0, z: 1 }));
 
-    // Caso degenerado: mirando casi al cenit/nadir, usamos otro eje de referencia
-    const esDegenerado = !isFinite(right.x)
-        || (Math.abs(right.x) < 1e-9 && Math.abs(right.y) < 1e-9 && Math.abs(right.z) < 1e-9);
+// =====================================================
+// VECTORES
+// =====================================================
 
-    if (esDegenerado) right = normalizar(cruz(forward, { x: 1, y: 0, z: 0 }));
+function vector(az, alt) {
+    az = rad(az);
+    alt = rad(alt);
 
-    const up = cruz(right, forward);
+    return {
+        x: Math.cos(alt) * Math.sin(az),
+        y: Math.cos(alt) * Math.cos(az),
+        z: Math.sin(alt)
+    };
+}
+
+function dot(a, b) {
+    return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
+function cross(a, b) {
+    return {
+        x: a.y * b.z - a.z * b.y,
+        y: a.z * b.x - a.x * b.z,
+        z: a.x * b.y - a.y * b.x
+    };
+}
+
+function unit(v) {
+    const n = Math.hypot(v.x, v.y, v.z) || 1;
+
+    return {
+        x: v.x / n,
+        y: v.y / n,
+        z: v.z / n
+    };
+}
+
+
+// =====================================================
+// CÁMARA 3D
+// =====================================================
+
+function baseCamara() {
+    const forward = vector(heading, pitch);
+
+    let right = unit(
+        cross(forward, { x: 0, y: 0, z: 1 })
+    );
+
+    if (Math.hypot(right.x, right.y) < 0.0001) {
+        right = unit(
+            cross(forward, { x: 1, y: 0, z: 0 })
+        );
+    }
+
+    let up = unit(cross(right, forward));
+
+    // Roll
+    const r = rad(roll);
+
+    if (roll) {
+        const oldRight = { ...right };
+        const oldUp = { ...up };
+
+        right = {
+            x: oldRight.x * Math.cos(r) + oldUp.x * Math.sin(r),
+            y: oldRight.y * Math.cos(r) + oldUp.y * Math.sin(r),
+            z: oldRight.z * Math.cos(r) + oldUp.z * Math.sin(r)
+        };
+
+        up = {
+            x: -oldRight.x * Math.sin(r) + oldUp.x * Math.cos(r),
+            y: -oldRight.y * Math.sin(r) + oldUp.y * Math.cos(r),
+            z: -oldRight.z * Math.sin(r) + oldUp.z * Math.cos(r)
+        };
+    }
+
     return { forward, right, up };
 }
 
+
 // =====================================================
-// PROYECCIÓN EN PANTALLA
+// PROYECCIÓN
 // =====================================================
-function proyectarPunto(ra, dec, lst, base, focalH, focalV, centroX, centroY) {
-    const { azimut, altitud } = estrellaAltAz(ra, dec, lst);
-    return proyectarAltAz(azimut, altitud, base, focalH, focalV, centroX, centroY);
-}
 
-function proyectarAltAz(azimut, altitud, base, focalH, focalV, centroX, centroY) {
-    if (altitud <= 0) return null;
+function proyectar(az, alt, base, fx, fy, cx, cy) {
+    const p = vector(az, alt);
 
-    const punto = azAltAVector(azimut, altitud);
-    const pf = producto(punto, base.forward);
+    const frente = dot(p, base.forward);
 
-    if (pf <= 0.01) return null; // detrás de la cámara
+    if (frente <= 0.001) return null;
 
-    const px = producto(punto, base.right);
-    const py = producto(punto, base.up);
+    const x = cx + fx * dot(p, base.right) / frente;
+    const y = cy - fy * dot(p, base.up) / frente;
 
-    const x = centroX + focalH * (px / pf);
-    const y = centroY - focalV * (py / pf);
+    const margen = 100;
 
-    const fueraDePantalla = x < -100 || x > centroX * 2 + 100 || y < -100 || y > centroY * 2 + 100;
-    if (fueraDePantalla) return null;
+    if (
+        x < -margen ||
+        x > innerWidth + margen ||
+        y < -margen ||
+        y > innerHeight + margen
+    ) {
+        return null;
+    }
 
     return { x, y };
 }
 
+
 // =====================================================
-// SOL, LUNA Y PLANETAS
+// PLANETAS
 // =====================================================
-function actualizarCuerposCelestes() {
-    if (latitud === undefined || longitud === undefined || typeof Astronomy === "undefined") return;
+
+const planetas = [
+    ["Sun", "Sol"],
+    ["Moon", "Luna"],
+    ["Mercury", "Mercurio"],
+    ["Venus", "Venus"],
+    ["Mars", "Marte"],
+    ["Jupiter", "Júpiter"],
+    ["Saturn", "Saturno"]
+];
+
+function actualizarPlanetas() {
+    if (
+        lat === undefined ||
+        lon === undefined ||
+        typeof Astronomy === "undefined"
+    ) return;
 
     const ahora = new Date();
-    const observador = new Astronomy.Observer(latitud, longitud, 0);
+    const observador =
+        new Astronomy.Observer(lat, lon, 0);
 
-    cuerpos = CUERPOS_A_MOSTRAR.map(({ body, nombre }) => {
+    cuerpos = planetas.map(([body, nombre]) => {
         try {
-            const ecuatorial = Astronomy.Equator(Astronomy.Body[body], ahora, observador, true, true);
-            const horizonte = Astronomy.Horizon(ahora, observador, ecuatorial.ra, ecuatorial.dec, "normal");
+            const e = Astronomy.Equator(
+                Astronomy.Body[body],
+                ahora,
+                observador,
+                true,
+                true
+            );
+
+            const h = Astronomy.Horizon(
+                ahora,
+                observador,
+                e.ra,
+                e.dec,
+                "normal"
+            );
 
             return {
                 nombre,
-                esLuna: nombre === "Luna",
-                azimut: horizonte.azimuth,
-                altitud: horizonte.altitude
+                az: h.azimuth,
+                alt: h.altitude
             };
-        } catch (error) {
-            console.error("Error calculando posición de " + nombre, error);
+
+        } catch {
             return null;
         }
     }).filter(Boolean);
 
-    dibujarCielo();
+    render();
 }
 
+
 // =====================================================
-// DIBUJO
+// ESTRELLAS
 // =====================================================
-function dibujarConstelaciones(lst, base, focalH, focalV, centroX, centroY) {
-    ctx.strokeStyle = "rgba(120, 170, 255, 0.55)";
-    ctx.lineWidth = 1;
 
-    for (const constelacion of constelaciones) {
-        let puntoParaNombre = null;
-
-        for (const linea of constelacion.lineas) {
-            ctx.beginPath();
-            let hayTrazo = false;
-
-            for (let i = 0; i < linea.length - 1; i++) {
-                const [ra1, dec1] = linea[i];
-                const [ra2, dec2] = linea[i + 1];
-
-                const p1 = proyectarPunto(ra1, dec1, lst, base, focalH, focalV, centroX, centroY);
-                const p2 = proyectarPunto(ra2, dec2, lst, base, focalH, focalV, centroX, centroY);
-
-                // Solo se dibuja el segmento si ambos extremos están en cámara
-                if (p1 && p2) {
-                    ctx.moveTo(p1.x, p1.y);
-                    ctx.lineTo(p2.x, p2.y);
-                    hayTrazo = true;
-                    puntoParaNombre ??= p1;
-                }
-            }
-
-            if (hayTrazo) ctx.stroke();
-        }
-
-        if (puntoParaNombre) {
-            ctx.font = "13px Arial, sans-serif";
-            ctx.fillStyle = "rgba(180, 210, 255, 0.75)";
-            ctx.fillText(constelacion.nombre, puntoParaNombre.x + 6, puntoParaNombre.y - 6);
-        }
-    }
-}
-
-function dibujarEstrellas(lst, base, focalH, focalV, centroX, centroY) {
+function dibujarEstrellas(
+    lst,
+    base,
+    fx,
+    fy,
+    cx,
+    cy
+) {
     for (const estrella of estrellas) {
-        if (!estrella.RA || !estrella.Dec) continue;
+        const ra = raGrados(estrella.RA);
+        const dec = decGrados(estrella.Dec);
 
-        const ra = raAGrados(estrella.RA);
-        const dec = decAGrados(estrella.Dec);
         if (ra === null || dec === null) continue;
 
-        const p = proyectarPunto(ra, dec, lst, base, focalH, focalV, centroX, centroY);
+        const h = altAz(ra, dec, lst);
+
+        const p = proyectar(
+            h.az,
+            h.alt,
+            base,
+            fx,
+            fy,
+            cx,
+            cy
+        );
+
         if (!p) continue;
 
-        const magnitud = Number(estrella.V);
-        if (Number.isNaN(magnitud)) continue;
+        const mag = Number(estrella.V);
 
-        const radio = Math.max(0.6, Math.min(5, 3.8 - magnitud * 0.45));
-        const brillo = Math.max(0.15, Math.min(1, 1.2 - magnitud / 8));
+        if (!Number.isFinite(mag)) continue;
+
+        const radio = limitar(
+            3.8 - mag * 0.45,
+            0.5,
+            5
+        );
+
+        const brillo = limitar(
+            1.2 - mag / 8,
+            0.15,
+            1
+        );
 
         ctx.beginPath();
-        ctx.arc(p.x, p.y, radio, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(255,255,255,${brillo})`;
+        ctx.arc(
+            p.x,
+            p.y,
+            radio,
+            0,
+            Math.PI * 2
+        );
+
+        ctx.fillStyle =
+            `rgba(255,255,255,${brillo})`;
+
         ctx.fill();
     }
 }
 
-function dibujarCuerposCelestes(base, focalH, focalV, centroX, centroY) {
+
+// =====================================================
+// CONSTELACIONES
+// =====================================================
+
+function dibujarConstelaciones(
+    lst,
+    base,
+    fx,
+    fy,
+    cx,
+    cy
+) {
+    ctx.strokeStyle =
+        "rgba(120,170,255,.55)";
+
+    ctx.lineWidth = 1;
+
+    ctx.font =
+        "13px Arial";
+
+    ctx.fillStyle =
+        "rgba(180,210,255,.75)";
+
+    for (const c of constelaciones) {
+        let nombrePunto = null;
+
+        for (const linea of c.lineas || []) {
+            ctx.beginPath();
+
+            let dibujado = false;
+
+            for (let i = 0; i < linea.length - 1; i++) {
+                const p1 = linea[i];
+                const p2 = linea[i + 1];
+
+                const a = proyectar(
+                    ...Object.values(altAz(
+                        p1[0],
+                        p1[1],
+                        lst
+                    )),
+                    base,
+                    fx,
+                    fy,
+                    cx,
+                    cy
+                );
+
+                const b = proyectar(
+                    ...Object.values(altAz(
+                        p2[0],
+                        p2[1],
+                        lst
+                    )),
+                    base,
+                    fx,
+                    fy,
+                    cx,
+                    cy
+                );
+
+                if (!a || !b) continue;
+
+                ctx.moveTo(a.x, a.y);
+                ctx.lineTo(b.x, b.y);
+
+                nombrePunto ||= a;
+                dibujado = true;
+            }
+
+            if (dibujado) ctx.stroke();
+        }
+
+        if (nombrePunto) {
+            ctx.fillText(
+                c.nombre || "",
+                nombrePunto.x + 6,
+                nombrePunto.y - 6
+            );
+        }
+    }
+}
+
+
+// =====================================================
+// CUERPOS CELESTES
+// =====================================================
+
+function dibujarCuerpos(
+    base,
+    fx,
+    fy,
+    cx,
+    cy
+) {
     ctx.textAlign = "center";
-    ctx.font = "13px Arial, sans-serif";
+    ctx.font = "13px Arial";
+
+    const tamaños = {
+        Sol: 16,
+        Luna: 13,
+        Júpiter: 8,
+        Saturno: 7,
+        Venus: 6,
+        Marte: 5,
+        Mercurio: 4
+    };
+
+    const colores = {
+        Sol: "#fff0a0",
+        Luna: "#e8e8e0",
+        Júpiter: "#e8c28c",
+        Saturno: "#ead6a0",
+        Venus: "#fff0b0",
+        Marte: "#e77d52",
+        Mercurio: "#bdb7a8"
+    };
 
     for (const cuerpo of cuerpos) {
-        const p = proyectarAltAz(cuerpo.azimut, cuerpo.altitud, base, focalH, focalV, centroX, centroY);
+        const p = proyectar(
+            cuerpo.az,
+            cuerpo.alt,
+            base,
+            fx,
+            fy,
+            cx,
+            cy
+        );
+
         if (!p) continue;
 
-        const radio = cuerpo.esLuna ? 14 : 6;
-        const color = cuerpo.esLuna ? "#e8e8e0" : "#ffd27f";
+        const radio =
+            tamaños[cuerpo.nombre] || 5;
 
         ctx.beginPath();
-        ctx.arc(p.x, p.y, radio, 0, Math.PI * 2);
-        ctx.fillStyle = color;
+
+        ctx.arc(
+            p.x,
+            p.y,
+            radio,
+            0,
+            Math.PI * 2
+        );
+
+        ctx.fillStyle =
+            colores[cuerpo.nombre] ||
+            "#ffd27f";
+
         ctx.fill();
 
-        ctx.fillStyle = "rgba(255,255,255,0.9)";
-        ctx.fillText(cuerpo.nombre, p.x, p.y - radio - 6);
+        ctx.fillStyle =
+            "rgba(255,255,255,.9)";
+
+        ctx.fillText(
+            cuerpo.nombre,
+            p.x,
+            p.y - radio - 6
+        );
     }
 
     ctx.textAlign = "left";
 }
 
+
+// =====================================================
+// DIBUJAR TODO
+// =====================================================
+
 function dibujarCielo() {
-    if (latitud === undefined || longitud === undefined || estrellas.length === 0) return;
+    if (
+        lat === undefined ||
+        lon === undefined
+    ) return;
 
-    const ancho = window.innerWidth;
-    const alto = window.innerHeight;
-    const centroX = ancho / 2;
-    const centroY = alto / 2;
+    const w = innerWidth;
+    const h = innerHeight;
 
-    // Solo limpiamos: el fondo es el vídeo de la cámara (o el degradado en modo libre)
-    ctx.clearRect(0, 0, ancho, alto);
+    const cx = w / 2;
+    const cy = h / 2;
 
+    ctx.clearRect(0, 0, w, h);
+
+    const base = baseCamara();
     const lst = tiempoSideral();
-    const base = baseCamara(heading, pitch);
-    const focalH = centroX / Math.tan((FOV_HORIZONTAL * Math.PI / 180) / 2);
-    const focalV = centroY / Math.tan((FOV_VERTICAL * Math.PI / 180) / 2);
 
-    if (constelaciones.length > 0) dibujarConstelaciones(lst, base, focalH, focalV, centroX, centroY);
-    dibujarEstrellas(lst, base, focalH, focalV, centroX, centroY);
-    dibujarCuerposCelestes(base, focalH, focalV, centroX, centroY);
-}
+    const fx =
+        cx / Math.tan(rad(fovH) / 2);
 
-// =====================================================
-// SENSORES DE ORIENTACIÓN
-// =====================================================
-function activarSensores() {
-    let ultimaActualizacion = 0;
+    const fy =
+        cy / Math.tan(rad(fovV) / 2);
 
-    window.addEventListener("deviceorientation", evento => {
-        if (modo !== "ar") return;
-
-        const ahora = Date.now();
-        if (ahora - ultimaActualizacion < 30) return;
-        ultimaActualizacion = ahora;
-
-        if (debugElemento) {
-            debugElemento.textContent =
-                `alpha: ${evento.alpha?.toFixed(1)} | beta: ${evento.beta?.toFixed(1)} | gamma: ${evento.gamma?.toFixed(1)}`;
-        }
-
-        actualizarHeading(evento);
-        actualizarPitch(evento);
-        dibujarCielo();
-    }, true);
-}
-
-function actualizarHeading(evento) {
-    // iPhone/iPad dan compás directo; Android (y otros) dan alpha
-    const nuevoHeading = typeof evento.webkitCompassHeading === "number"
-        ? evento.webkitCompassHeading
-        : typeof evento.alpha === "number" ? 360 - evento.alpha : null;
-
-    if (nuevoHeading === null || Number.isNaN(nuevoHeading)) return;
-
-    const headingNormalizado = (nuevoHeading + 360) % 360;
-
-    if (!headingInicializado) {
-        heading = headingNormalizado;
-        headingInicializado = true;
-    } else {
-        // Diferencia más corta, contemplando el salto 360°→0°
-        let diferencia = headingNormalizado - heading;
-        diferencia = ((diferencia + 180) % 360 + 360) % 360 - 180;
-
-        // Cerca del cenit el sensor se pone ruidoso: se refuerza el suavizado ahí
-        const cercaniaAlCenit = Math.min(1, Math.abs(pitch) / 90);
-        const factorHeadingActual = FACTOR_SUAVIZADO_HEADING * (1 - cercaniaAlCenit * 0.85);
-
-        heading = (heading + diferencia * factorHeadingActual + 360) % 360;
+    if (constelaciones.length) {
+        dibujarConstelaciones(
+            lst, base, fx, fy, cx, cy
+        );
     }
 
-    direccionElemento.textContent = heading.toFixed(1) + "°";
+    dibujarEstrellas(
+        lst, base, fx, fy, cx, cy
+    );
+
+    dibujarCuerpos(
+        base, fx, fy, cx, cy
+    );
 }
 
-function actualizarPitch(evento) {
-    if (typeof evento.beta !== "number" || Number.isNaN(evento.beta)) return;
 
-    ultimoBetaCrudo = evento.beta;
+// =====================================================
+// SENSORES
+// =====================================================
 
-    // Hasta calibrar, se usa 90 como referencia provisional
-    const referencia = referenciaBeta ?? 90;
-    let pitchCrudo = evento.beta - referencia;
+function activarSensores() {
+    window.addEventListener(
+        "deviceorientation",
+        e => {
+            if (modo !== "ar") return;
 
-    // Cerca de ±90° la brújula del móvil se vuelve inestable (limitación física del sensor)
-    pitchCrudo = Math.max(-89, Math.min(89, pitchCrudo));
+            const alpha = e.alpha;
+            const beta = e.beta;
+            const gamma = e.gamma;
 
-    pitch += (pitchCrudo - pitch) * FACTOR_SUAVIZADO_PITCH;
+            if (
+                alpha === null ||
+                beta === null ||
+                gamma === null
+            ) return;
 
-    altitudElemento.textContent = pitch.toFixed(1) + "°" + (referenciaBeta === null ? " (sin calibrar)" : "");
+            ultimoBeta = beta;
+
+            let nuevoHeading =
+                typeof e.webkitCompassHeading === "number"
+                    ? e.webkitCompassHeading
+                    : 360 - alpha;
+
+            nuevoHeading = normalizar(nuevoHeading);
+
+            const referencia =
+                betaReferencia ?? 90;
+
+            const nuevoPitch =
+                limitar(
+                    beta - referencia,
+                    -89,
+                    89
+                );
+
+            const nuevoRoll =
+                limitar(gamma, -90, 90);
+
+            heading =
+                suavizarAngulo(
+                    heading,
+                    nuevoHeading,
+                    0.2
+                );
+
+            pitch +=
+                (nuevoPitch - pitch) * 0.2;
+
+            roll +=
+                (nuevoRoll - roll) * 0.15;
+
+            UI.direccion.textContent =
+                `${heading.toFixed(1)}°`;
+
+            UI.altitud.textContent =
+                `${pitch.toFixed(1)}°` +
+                (
+                    betaReferencia === null
+                        ? " (sin calibrar)"
+                        : ""
+                );
+
+            UI.debug.textContent =
+                `α:${alpha.toFixed(0)} ` +
+                `β:${beta.toFixed(0)} ` +
+                `γ:${gamma.toFixed(0)}`;
+
+            render();
+        },
+        true
+    );
 }
 
-function calibrarHorizonte() {
-    if (ultimoBetaCrudo === null) {
-        alert("Activa primero los sensores y mueve el móvil un poco.");
+
+// =====================================================
+// CALIBRACIÓN
+// =====================================================
+
+function calibrar() {
+    if (ultimoBeta === null) {
+        alert(
+            "Activa los sensores primero."
+        );
         return;
     }
 
-    referenciaBeta = ultimoBetaCrudo;
-    console.log("📐 Horizonte calibrado con beta =", referenciaBeta);
+    betaReferencia = ultimoBeta;
+    pitch = 0;
+
+    UI.altitud.textContent = "0°";
+
+    render();
 }
 
+
 // =====================================================
-// FOV (ZOOM)
+// FOV
 // =====================================================
-function inicializarControlFOV() {
-    const fovSlider = document.getElementById("fovSlider");
-    const fovValorTexto = document.getElementById("fovValor");
-    if (!fovSlider) return;
 
-    fovSlider.value = FOV_HORIZONTAL;
-    if (fovValorTexto) fovValorTexto.textContent = FOV_HORIZONTAL + "°";
-
-    fovSlider.addEventListener("input", () => {
-        FOV_HORIZONTAL = Number(fovSlider.value);
-        FOV_VERTICAL = Math.round(FOV_HORIZONTAL * RELACION_FOV);
-
-        if (fovValorTexto) fovValorTexto.textContent = FOV_HORIZONTAL + "°";
-
-        localStorage.setItem("fovHorizontal", FOV_HORIZONTAL);
-        localStorage.setItem("fovVertical", FOV_VERTICAL);
-
-        dibujarCielo();
-    });
+function actualizarFOV() {
+    fovV =
+        2 * deg(
+            Math.atan(
+                Math.tan(rad(fovH) / 2) *
+                innerHeight /
+                innerWidth
+            )
+        );
 }
 
+UI.fov.value = fovH;
+actualizarFOV();
+
+UI.fov.addEventListener("input", () => {
+    fovH = Number(UI.fov.value);
+
+    localStorage.fovH = fovH;
+
+    actualizarFOV();
+
+    UI.fovTexto.textContent =
+        `${fovH}°`;
+
+    render();
+});
+
+UI.fovTexto.textContent = `${fovH}°`;
+
+
 // =====================================================
-// MODO AR / MODO LIBRE
+// MODO LIBRE
 // =====================================================
+
 function cambiarModo() {
-    modo = modo === "ar" ? "libre" : "ar";
-    document.body.classList.toggle("modo-libre", modo === "libre");
+    modo =
+        modo === "ar"
+            ? "libre"
+            : "ar";
 
-    const botonModo = document.getElementById("modoBoton");
-    if (botonModo) botonModo.textContent = modo === "ar" ? "Modo mapa libre" : "Modo cámara (AR)";
+    document.body.classList.toggle(
+        "modo-libre",
+        modo === "libre"
+    );
 
-    dibujarCielo();
+    UI.modo.textContent =
+        modo === "ar"
+            ? "Modo mapa libre"
+            : "Modo cámara (AR)";
+
+    render();
 }
+
 
 // =====================================================
-// ARRASTRE (rotar la vista en modo libre)
+// ARRASTRE
 // =====================================================
-function iniciarArrastre(clientX, clientY) {
-    if (modo !== "libre") return;
 
-    arrastrando = true;
-    arrastreInicioX = clientX;
-    arrastreInicioY = clientY;
-    headingAlIniciar = heading;
-    pitchAlIniciar = pitch;
-}
+canvas.addEventListener(
+    "pointerdown",
+    e => {
+        if (modo !== "libre") return;
 
-function moverArrastre(clientX, clientY) {
-    if (!arrastrando || modo !== "libre") return;
+        arrastrando = true;
 
-    const deltaX = clientX - arrastreInicioX;
-    const deltaY = clientY - arrastreInicioY;
+        inicioX = e.clientX;
+        inicioY = e.clientY;
 
-    // Grados por pixel según el FOV actual, para que se sienta 1:1 con la pantalla
-    const gradosPorPixelX = FOV_HORIZONTAL / window.innerWidth;
-    const gradosPorPixelY = FOV_VERTICAL / window.innerHeight;
+        inicioHeading = heading;
+        inicioPitch = pitch;
 
-    heading = ((headingAlIniciar - deltaX * gradosPorPixelX) % 360 + 360) % 360;
-    pitch = Math.max(-85, Math.min(85, pitchAlIniciar - deltaY * gradosPorPixelY));
+        canvas.setPointerCapture?.(
+            e.pointerId
+        );
+    }
+);
 
-    direccionElemento.textContent = heading.toFixed(1) + "°";
-    altitudElemento.textContent = pitch.toFixed(1) + "°";
+canvas.addEventListener(
+    "pointermove",
+    e => {
+        if (!arrastrando) return;
 
-    dibujarCielo();
-}
+        const dx =
+            e.clientX - inicioX;
 
-function terminarArrastre() {
-    arrastrando = false;
-}
+        const dy =
+            e.clientY - inicioY;
+
+        heading =
+            normalizar(
+                inicioHeading -
+                dx * fovH / innerWidth
+            );
+
+        pitch =
+            limitar(
+                inicioPitch -
+                dy * fovV / innerHeight,
+                -85,
+                85
+            );
+
+        UI.direccion.textContent =
+            `${heading.toFixed(1)}°`;
+
+        UI.altitud.textContent =
+            `${pitch.toFixed(1)}°`;
+
+        render();
+    }
+);
+
+window.addEventListener(
+    "pointerup",
+    () => arrastrando = false
+);
+
 
 // =====================================================
-// CANVAS Y CÁMARA
+// CÁMARA
 // =====================================================
-function redimensionarCanvas() {
-    const escala = window.devicePixelRatio || 1;
-
-    canvas.width = window.innerWidth * escala;
-    canvas.height = window.innerHeight * escala;
-    canvas.style.width = window.innerWidth + "px";
-    canvas.style.height = window.innerHeight + "px";
-
-    ctx.setTransform(escala, 0, 0, escala, 0, 0);
-    dibujarCielo();
-}
 
 async function iniciarCamara() {
-    const errorCamaraElemento = document.getElementById("errorCamara");
-
     try {
-        const transmision = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: "environment" }
-        });
+        const stream =
+            await navigator.mediaDevices.getUserMedia({
+                video: {
+                    facingMode: "environment"
+                },
+                audio: false
+            });
 
-        document.getElementById("camara").srcObject = transmision;
-    } catch (error) {
-        console.error("Error al iniciar la cámara:", error);
+        UI.camara.srcObject = stream;
 
-        if (errorCamaraElemento) {
-            errorCamaraElemento.textContent =
-                `No se pudo iniciar la cámara. Tipo: ${error.name}. ` +
-                `Revisa el permiso de cámara del sitio en los ajustes del navegador.`;
-            errorCamaraElemento.style.display = "block";
-        }
+    } catch (e) {
+        UI.error.textContent =
+            `No se pudo iniciar la cámara: ${e.name}`;
+
+        UI.error.style.display = "block";
     }
 }
 
-// =====================================================
-// EVENTOS Y ARRANQUE
-// =====================================================
-function inicializarEventos() {
-    document.getElementById("activar").addEventListener("click", async () => {
-        try {
-            const necesitaPermiso = typeof DeviceOrientationEvent !== "undefined"
-                && typeof DeviceOrientationEvent.requestPermission === "function";
 
-            if (necesitaPermiso) {
-                const permiso = await DeviceOrientationEvent.requestPermission();
+// =====================================================
+// EVENTOS
+// =====================================================
+
+UI.activar.addEventListener(
+    "click",
+    async () => {
+        try {
+            if (
+                typeof DeviceOrientationEvent !== "undefined" &&
+                typeof DeviceOrientationEvent.requestPermission ===
+                    "function"
+            ) {
+                const permiso =
+                    await DeviceOrientationEvent
+                        .requestPermission();
+
                 if (permiso !== "granted") return;
             }
 
             activarSensores();
-            document.getElementById("activar").textContent = "Sensores activados";
-        } catch (error) {
-            console.error("Error activando sensores:", error);
+
+            UI.activar.textContent =
+                "Sensores activados";
+
+        } catch (e) {
+            console.error(e);
         }
-    });
+    }
+);
 
-    document.getElementById("calibrar")?.addEventListener("click", calibrarHorizonte);
-    document.getElementById("modoBoton")?.addEventListener("click", cambiarModo);
+UI.calibrar.addEventListener(
+    "click",
+    calibrar
+);
 
-    canvas.addEventListener("pointerdown", e => iniciarArrastre(e.clientX, e.clientY));
-    canvas.addEventListener("pointermove", e => moverArrastre(e.clientX, e.clientY));
-    window.addEventListener("pointerup", terminarArrastre);
-    window.addEventListener("pointercancel", terminarArrastre);
+UI.modo.addEventListener(
+    "click",
+    cambiarModo
+);
 
-    window.addEventListener("resize", redimensionarCanvas);
+window.addEventListener(
+    "resize",
+    () => {
+        const dpr =
+            Math.min(devicePixelRatio || 1, 2);
+
+        canvas.width =
+            innerWidth * dpr;
+
+        canvas.height =
+            innerHeight * dpr;
+
+        canvas.style.width =
+            `${innerWidth}px`;
+
+        canvas.style.height =
+            `${innerHeight}px`;
+
+        ctx.setTransform(
+            dpr, 0, 0, dpr, 0, 0
+        );
+
+        actualizarFOV();
+        render();
+    }
+);
+
+
+// =====================================================
+// INICIO
+// =====================================================
+
+function escribir() {
+    const texto = "Tu ubicación es";
+    let i = 0;
+
+    const timer = setInterval(() => {
+        if (i >= texto.length) {
+            clearInterval(timer);
+            obtenerUbicacion();
+            return;
+        }
+
+        UI.mensaje.textContent +=
+            texto[i++];
+
+    }, 60);
 }
 
-inicializarControlFOV();
-inicializarEventos();
 escribir();
 iniciarCamara();
