@@ -32,31 +32,76 @@ let cuerpos = [];
 
 let modo = "ar";
 
-// Orientación de la cámara
+// Valores mostrados en UI
 let heading = 0;
 let pitch = 0;
 let roll = 0;
 
-// Calibración
-let headingReferencia = null;
-let betaReferencia = null;
-
-let ultimoHeading = null;
 let ultimoBeta = null;
-let ultimoGamma = null;
-
-let sensoresActivados = false;
+let betaReferencia = null;
 
 let fovH = Number(localStorage.getItem("fovH")) || 66;
 let fovV = 50;
 
 let renderPendiente = false;
-
 let arrastrando = false;
+
 let inicioX = 0;
 let inicioY = 0;
+
 let inicioHeading = 0;
 let inicioPitch = 0;
+
+// Sensores
+let sensoresActivados = false;
+
+// =====================================================
+// CÁMARA 3D
+// =====================================================
+//
+// En lugar de transformar:
+//
+// alpha -> heading
+// beta  -> pitch
+// gamma -> roll
+//
+// usamos un cuaternión completo.
+//
+// Esto evita el problema de gimbal lock cuando
+// apuntamos cerca del cenit.
+// =====================================================
+
+const camara3D = {
+
+    // Base de cámara en coordenadas del mundo
+    forward: {
+        x: 0,
+        y: 1,
+        z: 0
+    },
+
+    right: {
+        x: 1,
+        y: 0,
+        z: 0
+    },
+
+    up: {
+        x: 0,
+        y: 0,
+        z: 1
+    },
+
+    // Offset de calibración
+    calibrada: false,
+
+    offsetHeading: 0,
+
+    // Para suavizado
+    ultimoForward: null,
+    ultimoRight: null,
+    ultimoUp: null
+};
 
 // =====================================================
 // UTILIDADES
@@ -78,272 +123,9 @@ function diferenciaAngular(a, b) {
 
 function suavizarAngulo(actual, nuevo, factor) {
     return normalizar(
-        actual + diferenciaAngular(nuevo, actual) * factor
+        actual +
+        diferenciaAngular(nuevo, actual) * factor
     );
-}
-
-// =====================================================
-// RENDER
-// =====================================================
-
-function render() {
-    if (renderPendiente) return;
-
-    renderPendiente = true;
-
-    requestAnimationFrame(() => {
-        renderPendiente = false;
-        dibujarCielo();
-    });
-}
-
-// =====================================================
-// UBICACIÓN
-// =====================================================
-
-function obtenerUbicacion() {
-
-    if (!navigator.geolocation) {
-        mostrarUbicacionError(
-            "Geolocalización no disponible."
-        );
-        return;
-    }
-
-    navigator.geolocation.getCurrentPosition(
-        async ({ coords }) => {
-
-            lat = coords.latitude;
-            lon = coords.longitude;
-
-            UI.ubicacion.textContent =
-                await obtenerCiudad(lat, lon);
-
-            try {
-
-                const resultados = await Promise.all([
-                    cargar("estrellas.json"),
-                    cargar("constelaciones.json")
-                ]);
-
-                estrellas = Array.isArray(resultados[0])
-                    ? resultados[0]
-                    : [];
-
-                constelaciones = Array.isArray(resultados[1])
-                    ? resultados[1]
-                    : [];
-
-            } catch (error) {
-
-                console.error(
-                    "Error cargando los archivos JSON:",
-                    error
-                );
-
-            }
-
-            actualizarPlanetas();
-
-            render();
-
-            setInterval(actualizarPlanetas, 30000);
-
-            setTimeout(() => {
-                UI.pantalla?.remove();
-            }, 2500);
-        },
-
-        error => {
-
-            mostrarUbicacionError(
-                `Error ${error.code}: ${error.message}`
-            );
-
-        },
-
-        {
-            enableHighAccuracy: true,
-            timeout: 10000,
-            maximumAge: 0
-        }
-    );
-}
-
-async function obtenerCiudad(lat, lon) {
-
-    try {
-
-        const url =
-            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`;
-
-        const respuesta = await fetch(url);
-
-        if (!respuesta.ok) {
-            throw new Error("Error en Nominatim");
-        }
-
-        const datos = await respuesta.json();
-
-        const address = datos.address || {};
-
-        const ciudad =
-            address.city ||
-            address.town ||
-            address.village ||
-            address.municipality ||
-            address.county ||
-            "Ubicación desconocida";
-
-        return `${ciudad}, ${address.country || ""}`;
-
-    } catch (error) {
-
-        console.error(
-            "No se pudo obtener la ciudad:",
-            error
-        );
-
-        return "Ubicación obtenida";
-    }
-}
-
-function mostrarUbicacionError(texto) {
-
-    UI.mensaje.textContent =
-        "No se pudo obtener tu ubicación";
-
-    UI.ubicacion.textContent = texto;
-
-    setTimeout(() => {
-        UI.pantalla?.remove();
-    }, 2500);
-}
-
-// =====================================================
-// JSON
-// =====================================================
-
-async function cargar(archivo) {
-
-    const respuesta = await fetch(archivo);
-
-    if (!respuesta.ok) {
-        throw new Error(
-            `No se pudo cargar ${archivo}`
-        );
-    }
-
-    return await respuesta.json();
-}
-
-// =====================================================
-// RA / DEC
-// =====================================================
-
-function raGrados(ra) {
-
-    if (typeof ra !== "string") {
-        return null;
-    }
-
-    const p = ra.match(
-        /(\d+)h\s*(\d+)m\s*([\d.]+)s/i
-    );
-
-    if (!p) {
-        return null;
-    }
-
-    return (
-        Number(p[1]) +
-        Number(p[2]) / 60 +
-        Number(p[3]) / 3600
-    ) * 15;
-}
-
-function decGrados(dec) {
-
-    if (typeof dec !== "string") {
-        return null;
-    }
-
-    const p = dec.match(
-        /([+-])\s*(\d+)[°º]\s*(\d+)[′']\s*(\d+(?:\.\d+)?)[″"]/u
-    );
-
-    if (!p) {
-        return null;
-    }
-
-    const signo = p[1] === "-" ? -1 : 1;
-
-    return signo * (
-        Number(p[2]) +
-        Number(p[3]) / 60 +
-        Number(p[4]) / 3600
-    );
-}
-
-// =====================================================
-// TIEMPO SIDERAL
-// =====================================================
-
-function tiempoSideral() {
-
-    const jd =
-        Date.now() / 86400000 + 2440587.5;
-
-    const T =
-        (jd - 2451545.0) / 36525;
-
-    let gmst =
-        280.46061837 +
-        360.98564736629 *
-        (jd - 2451545.0) +
-        0.000387933 * T * T -
-        T * T * T / 38710000;
-
-    return normalizar(gmst + lon);
-}
-
-// =====================================================
-// RA / DEC → ALT / AZ
-// =====================================================
-
-function altAz(ra, dec, lst) {
-
-    let H = normalizar(lst - ra);
-
-    if (H > 180) {
-        H -= 360;
-    }
-
-    const L = rad(lat);
-    const D = rad(dec);
-    const h = rad(H);
-
-    const alt = Math.asin(
-        limitar(
-            Math.sin(L) * Math.sin(D) +
-            Math.cos(L) *
-            Math.cos(D) *
-            Math.cos(h),
-            -1,
-            1
-        )
-    );
-
-    const az = Math.atan2(
-        Math.sin(h),
-        Math.cos(h) * Math.sin(L) -
-        Math.tan(D) * Math.cos(L)
-    );
-
-    return {
-        az: normalizar(deg(az) + 180),
-        alt: deg(alt)
-    };
 }
 
 // =====================================================
@@ -392,80 +174,888 @@ function unit(v) {
     };
 }
 
+function sumar(a, b) {
+
+    return {
+        x: a.x + b.x,
+        y: a.y + b.y,
+        z: a.z + b.z
+    };
+}
+
+function multiplicar(v, n) {
+
+    return {
+        x: v.x * n,
+        y: v.y * n,
+        z: v.z * n
+    };
+}
+
 // =====================================================
-// CÁMARA 3D
+// CUATERNIONES
 // =====================================================
 
-function baseCamara() {
+function quat(x, y, z, w) {
 
-    const forward =
-        vector(heading, pitch);
+    return { x, y, z, w };
+}
 
-    let right = unit(
-        cross(
-            forward,
+function quatNormalizar(q) {
+
+    const n = Math.hypot(
+        q.x,
+        q.y,
+        q.z,
+        q.w
+    ) || 1;
+
+    return {
+        x: q.x / n,
+        y: q.y / n,
+        z: q.z / n,
+        w: q.w / n
+    };
+}
+
+function quatMultiplicar(a, b) {
+
+    return {
+        w:
+            a.w * b.w -
+            a.x * b.x -
+            a.y * b.y -
+            a.z * b.z,
+
+        x:
+            a.w * b.x +
+            a.x * b.w +
+            a.y * b.z -
+            a.z * b.y,
+
+        y:
+            a.w * b.y -
+            a.x * b.z +
+            a.y * b.w +
+            a.z * b.x,
+
+        z:
+            a.w * b.z +
+            a.x * b.y -
+            a.y * b.x +
+            a.z * b.w
+    };
+}
+
+function quatConjugado(q) {
+
+    return {
+        x: -q.x,
+        y: -q.y,
+        z: -q.z,
+        w: q.w
+    };
+}
+
+function rotarVectorQuat(v, q) {
+
+    const vq = {
+        x: v.x,
+        y: v.y,
+        z: v.z,
+        w: 0
+    };
+
+    const resultado =
+        quatMultiplicar(
+            quatMultiplicar(
+                q,
+                vq
+            ),
+            quatConjugado(q)
+        );
+
+    return {
+        x: resultado.x,
+        y: resultado.y,
+        z: resultado.z
+    };
+}
+
+// =====================================================
+// EULER DEVICE ORIENTATION -> QUATERNION
+// =====================================================
+
+function quaternionDesdeSensor(alpha, beta, gamma) {
+
+    const a = rad(alpha);
+    const b = rad(beta);
+    const g = rad(gamma);
+
+    /*
+     * DeviceOrientation usa:
+     *
+     * alpha = rotación Z
+     * beta  = rotación X
+     * gamma = rotación Y
+     *
+     * Orden equivalente YXZ.
+     */
+
+    const c1 = Math.cos(a / 2);
+    const s1 = Math.sin(a / 2);
+
+    const c2 = Math.cos(b / 2);
+    const s2 = Math.sin(b / 2);
+
+    const c3 = Math.cos(g / 2);
+    const s3 = Math.sin(g / 2);
+
+    let q = {
+
+        x:
+            s2 * c1 * c3 +
+            c2 * s1 * s3,
+
+        y:
+            c2 * s1 * c3 -
+            s2 * c1 * s3,
+
+        z:
+            c2 * c1 * s3 -
+            s2 * s1 * c3,
+
+        w:
+            c2 * c1 * c3 +
+            s2 * s1 * s3
+    };
+
+    q = quatNormalizar(q);
+
+    /*
+     * Corrección para que la cámara mire hacia
+     * delante de la pantalla.
+     */
+
+    const correccionPantalla = quat(
+        -Math.sqrt(0.5),
+        0,
+        0,
+        Math.sqrt(0.5)
+    );
+
+    q = quatMultiplicar(
+        q,
+        correccionPantalla
+    );
+
+    // Rotación según orientación de pantalla
+    let screenAngle = 0;
+
+    try {
+
+        screenAngle =
+            screen.orientation?.angle || 0;
+
+    } catch (e) {
+
+        screenAngle = 0;
+    }
+
+    if (screenAngle !== 0) {
+
+        const sr = rad(screenAngle);
+
+        const screenQ = quat(
+            0,
+            0,
+            -Math.sin(sr / 2),
+            Math.cos(sr / 2)
+        );
+
+        q = quatMultiplicar(
+            q,
+            screenQ
+        );
+    }
+
+    return quatNormalizar(q);
+}
+
+// =====================================================
+// ORIENTACIÓN DE CÁMARA DESDE SENSOR
+// =====================================================
+
+function actualizarCamaraDesdeSensor(
+    alpha,
+    beta,
+    gamma
+) {
+
+    const q =
+        quaternionDesdeSensor(
+            alpha,
+            beta,
+            gamma
+        );
+
+    /*
+     * Coordenadas locales de la cámara:
+     *
+     * delante = -Z
+     * derecha = +X
+     * arriba  = +Y
+     */
+
+    let forward =
+        rotarVectorQuat(
             {
                 x: 0,
                 y: 0,
-                z: 1
-            }
-        )
-    );
+                z: -1
+            },
+            q
+        );
 
-    if (
-        Math.hypot(right.x, right.y) < 0.0001
-    ) {
+    let right =
+        rotarVectorQuat(
+            {
+                x: 1,
+                y: 0,
+                z: 0
+            },
+            q
+        );
+
+    let up =
+        rotarVectorQuat(
+            {
+                x: 0,
+                y: 1,
+                z: 0
+            },
+            q
+        );
+
+    forward = unit(forward);
+    right = unit(right);
+    up = unit(up);
+
+    /*
+     * Calibración horizontal.
+     *
+     * No modificamos el eje vertical.
+     * Solamente giramos toda la cámara alrededor
+     * del eje Z para alinearla con el norte.
+     */
+
+    if (camara3D.calibrada) {
+
+        const angulo = rad(
+            camara3D.offsetHeading
+        );
+
+        const c = Math.cos(angulo);
+        const s = Math.sin(angulo);
+
+        function rotZ(v) {
+
+            return {
+                x: v.x * c - v.y * s,
+                y: v.x * s + v.y * c,
+                z: v.z
+            };
+        }
+
+        forward = unit(rotZ(forward));
+        right = unit(rotZ(right));
+        up = unit(rotZ(up));
+    }
+
+    /*
+     * Suavizado vectorial.
+     *
+     * Esto es importante:
+     * suavizamos los vectores y NO los ángulos.
+     *
+     * Así no existe el problema de que 359°
+     * pase a 0° y provoque una vuelta completa.
+     */
+
+    const factor = 0.18;
+
+    if (camara3D.ultimoForward) {
+
+        forward = unit(
+            sumar(
+                multiplicar(
+                    camara3D.ultimoForward,
+                    1 - factor
+                ),
+                multiplicar(
+                    forward,
+                    factor
+                )
+            )
+        );
 
         right = unit(
-            cross(
-                forward,
-                {
-                    x: 1,
-                    y: 0,
-                    z: 0
-                }
+            sumar(
+                multiplicar(
+                    camara3D.ultimoRight,
+                    1 - factor
+                ),
+                multiplicar(
+                    right,
+                    factor
+                )
+            )
+        );
+
+        up = unit(
+            sumar(
+                multiplicar(
+                    camara3D.ultimoUp,
+                    1 - factor
+                ),
+                multiplicar(
+                    up,
+                    factor
+                )
             )
         );
     }
 
-    let up = unit(
-        cross(right, forward)
-    );
+    camara3D.forward = forward;
+    camara3D.right = right;
+    camara3D.up = up;
 
-    // Aplicar roll
+    camara3D.ultimoForward = forward;
+    camara3D.ultimoRight = right;
+    camara3D.ultimoUp = up;
+
+    /*
+     * Datos visuales para la interfaz.
+     *
+     * Estos valores son solamente informativos.
+     * YA NO se utilizan para dibujar la cámara.
+     */
+
+    const horizontal =
+        Math.hypot(
+            forward.x,
+            forward.y
+        );
+
+    if (horizontal > 0.0001) {
+
+        heading =
+            normalizar(
+                deg(
+                    Math.atan2(
+                        forward.x,
+                        forward.y
+                    )
+                )
+            );
+    }
+
+    pitch =
+        deg(
+            Math.asin(
+                limitar(
+                    forward.z,
+                    -1,
+                    1
+                )
+            )
+        );
+
+    /*
+     * Roll calculado respecto al horizonte.
+     */
+
+    const horizonteRight = {
+        x: Math.cos(rad(heading)),
+        y: -Math.sin(rad(heading)),
+        z: 0
+    };
+
+    const rollDot =
+        limitar(
+            dot(
+                right,
+                horizonteRight
+            ),
+            -1,
+            1
+        );
+
+    roll =
+        deg(
+            Math.acos(
+                rollDot
+            )
+        );
+
+    if (up.z < 0) {
+        roll = -roll;
+    }
+
+    UI.direccion.textContent =
+        `${heading.toFixed(1)}°`;
+
+    UI.altitud.textContent =
+        `${pitch.toFixed(1)}°`;
+
+    UI.debug.textContent =
+        `α:${alpha.toFixed(0)} ` +
+        `β:${beta.toFixed(0)} ` +
+        `γ:${gamma.toFixed(0)}`;
+}
+
+// =====================================================
+// RENDER
+// =====================================================
+
+function render() {
+
+    if (renderPendiente) {
+        return;
+    }
+
+    renderPendiente = true;
+
+    requestAnimationFrame(() => {
+
+        renderPendiente = false;
+
+        dibujarCielo();
+    });
+}
+
+// =====================================================
+// UBICACIÓN
+// =====================================================
+
+function obtenerUbicacion() {
+
+    if (!navigator.geolocation) {
+
+        mostrarUbicacionError(
+            "Geolocalización no disponible."
+        );
+
+        return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+
+        async ({ coords }) => {
+
+            lat = coords.latitude;
+            lon = coords.longitude;
+
+            UI.ubicacion.textContent =
+                await obtenerCiudad(
+                    lat,
+                    lon
+                );
+
+            try {
+
+                const resultados =
+                    await Promise.all([
+                        cargar("estrellas.json"),
+                        cargar("constelaciones.json")
+                    ]);
+
+                estrellas = resultados[0];
+                constelaciones = resultados[1];
+
+            } catch (error) {
+
+                console.error(
+                    "Error cargando los archivos JSON:",
+                    error
+                );
+            }
+
+            actualizarPlanetas();
+
+            render();
+
+            setInterval(
+                actualizarPlanetas,
+                30000
+            );
+
+            setTimeout(() => {
+
+                UI.pantalla?.remove();
+
+            }, 2500);
+        },
+
+        error => {
+
+            mostrarUbicacionError(
+                `Error ${error.code}: ${error.message}`
+            );
+        },
+
+        {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 0
+        }
+    );
+}
+
+async function obtenerCiudad(lat, lon) {
+
+    try {
+
+        const url =
+            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`;
+
+        const respuesta =
+            await fetch(url);
+
+        if (!respuesta.ok) {
+
+            throw new Error(
+                "Error en Nominatim"
+            );
+        }
+
+        const datos =
+            await respuesta.json();
+
+        const address =
+            datos.address || {};
+
+        const ciudad =
+            address.city ||
+            address.town ||
+            address.village ||
+            address.municipality ||
+            address.county ||
+            "Ubicación desconocida";
+
+        return `${ciudad}, ${address.country || ""}`;
+
+    } catch (error) {
+
+        console.error(
+            "No se pudo obtener la ciudad:",
+            error
+        );
+
+        return "Ubicación obtenida";
+    }
+}
+
+function mostrarUbicacionError(texto) {
+
+    UI.mensaje.textContent =
+        "No se pudo obtener tu ubicación";
+
+    UI.ubicacion.textContent =
+        texto;
+
+    setTimeout(() => {
+
+        UI.pantalla?.remove();
+
+    }, 2500);
+}
+
+// =====================================================
+// JSON
+// =====================================================
+
+async function cargar(archivo) {
+
+    const respuesta =
+        await fetch(archivo);
+
+    if (!respuesta.ok) {
+
+        throw new Error(
+            `No se pudo cargar ${archivo}`
+        );
+    }
+
+    return await respuesta.json();
+}
+
+// =====================================================
+// RA / DEC
+// =====================================================
+
+function raGrados(ra) {
+
+    if (typeof ra !== "string") {
+        return null;
+    }
+
+    const p =
+        ra.match(
+            /(\d+)h\s*(\d+)m\s*([\d.]+)s/i
+        );
+
+    if (!p) {
+        return null;
+    }
+
+    return (
+        Number(p[1]) +
+        Number(p[2]) / 60 +
+        Number(p[3]) / 3600
+    ) * 15;
+}
+
+function decGrados(dec) {
+
+    if (typeof dec !== "string") {
+        return null;
+    }
+
+    const p =
+        dec.match(
+            /([+-])\s*(\d+)[°º]\s*(\d+)[′']\s*(\d+(?:\.\d+)?)[″"]/u
+        );
+
+    if (!p) {
+        return null;
+    }
+
+    const signo =
+        p[1] === "-" ? -1 : 1;
+
+    return signo * (
+        Number(p[2]) +
+        Number(p[3]) / 60 +
+        Number(p[4]) / 3600
+    );
+}
+
+// =====================================================
+// TIEMPO SIDERAL
+// =====================================================
+
+function tiempoSideral() {
+
+    const jd =
+        Date.now() / 86400000 +
+        2440587.5;
+
+    const T =
+        (jd - 2451545.0) / 36525;
+
+    let gmst =
+        280.46061837 +
+        360.98564736629 *
+        (jd - 2451545.0) +
+        0.000387933 *
+        T *
+        T -
+        T *
+        T *
+        T /
+        38710000;
+
+    return normalizar(
+        gmst + lon
+    );
+}
+
+// =====================================================
+// RA / DEC -> ALT / AZ
+// =====================================================
+
+function altAz(ra, dec, lst) {
+
+    let H =
+        normalizar(lst - ra);
+
+    if (H > 180) {
+        H -= 360;
+    }
+
+    const L = rad(lat);
+    const D = rad(dec);
+    const h = rad(H);
+
+    const alt =
+        Math.asin(
+            limitar(
+                Math.sin(L) *
+                Math.sin(D) +
+
+                Math.cos(L) *
+                Math.cos(D) *
+                Math.cos(h),
+
+                -1,
+                1
+            )
+        );
+
+    const az =
+        Math.atan2(
+            Math.sin(h),
+
+            Math.cos(h) *
+            Math.sin(L) -
+
+            Math.tan(D) *
+            Math.cos(L)
+        );
+
+    return {
+
+        az:
+            normalizar(
+                deg(az) + 180
+            ),
+
+        alt:
+            deg(alt)
+    };
+}
+
+// =====================================================
+// BASE DE CÁMARA
+// =====================================================
+
+function baseCamara() {
+
+    /*
+     * MODO AR:
+     * usar directamente la orientación 3D
+     * procedente del sensor.
+     */
+
+    if (modo === "ar") {
+
+        return {
+
+            forward: camara3D.forward,
+            right: camara3D.right,
+            up: camara3D.up
+        };
+    }
+
+    /*
+     * MODO LIBRE
+     */
+
+    const forward =
+        vector(
+            heading,
+            pitch
+        );
+
+    let right =
+        unit(
+            cross(
+                forward,
+                {
+                    x: 0,
+                    y: 0,
+                    z: 1
+                }
+            )
+        );
+
+    if (
+        Math.hypot(
+            right.x,
+            right.y
+        ) < 0.0001
+    ) {
+
+        right =
+            unit(
+                cross(
+                    forward,
+                    {
+                        x: 1,
+                        y: 0,
+                        z: 0
+                    }
+                )
+            );
+    }
+
+    let up =
+        unit(
+            cross(
+                right,
+                forward
+            )
+        );
+
     const r = rad(roll);
 
-    if (Math.abs(roll) > 0.001) {
+    if (roll !== 0) {
 
-        const oldRight = { ...right };
-        const oldUp = { ...up };
+        const oldRight = {
+            ...right
+        };
+
+        const oldUp = {
+            ...up
+        };
 
         right = {
+
             x:
-                oldRight.x * Math.cos(r) +
-                oldUp.x * Math.sin(r),
+                oldRight.x *
+                Math.cos(r) +
+
+                oldUp.x *
+                Math.sin(r),
 
             y:
-                oldRight.y * Math.cos(r) +
-                oldUp.y * Math.sin(r),
+                oldRight.y *
+                Math.cos(r) +
+
+                oldUp.y *
+                Math.sin(r),
 
             z:
-                oldRight.z * Math.cos(r) +
-                oldUp.z * Math.sin(r)
+                oldRight.z *
+                Math.cos(r) +
+
+                oldUp.z *
+                Math.sin(r)
         };
 
         up = {
+
             x:
-                -oldRight.x * Math.sin(r) +
-                oldUp.x * Math.cos(r),
+                -oldRight.x *
+                Math.sin(r) +
+
+                oldUp.x *
+                Math.cos(r),
 
             y:
-                -oldRight.y * Math.sin(r) +
-                oldUp.y * Math.cos(r),
+                -oldRight.y *
+                Math.sin(r) +
+
+                oldUp.y *
+                Math.cos(r),
 
             z:
-                -oldRight.z * Math.sin(r) +
-                oldUp.z * Math.cos(r)
+                -oldRight.z *
+                Math.sin(r) +
+
+                oldUp.z *
+                Math.cos(r)
         };
     }
 
@@ -490,10 +1080,17 @@ function proyectar(
     cy
 ) {
 
-    const p = vector(az, alt);
+    const p =
+        vector(
+            az,
+            alt
+        );
 
     const frente =
-        dot(p, base.forward);
+        dot(
+            p,
+            base.forward
+        );
 
     if (frente <= 0.001) {
         return null;
@@ -502,13 +1099,19 @@ function proyectar(
     const x =
         cx +
         fx *
-        dot(p, base.right) /
+        dot(
+            p,
+            base.right
+        ) /
         frente;
 
     const y =
         cy -
         fy *
-        dot(p, base.up) /
+        dot(
+            p,
+            base.up
+        ) /
         frente;
 
     const margen = 100;
@@ -519,6 +1122,7 @@ function proyectar(
         y < -margen ||
         y > innerHeight + margen
     ) {
+
         return null;
     }
 
@@ -533,6 +1137,7 @@ function proyectar(
 // =====================================================
 
 const planetas = [
+
     ["Sun", "Sol"],
     ["Moon", "Luna"],
     ["Mercury", "Mercurio"],
@@ -540,6 +1145,7 @@ const planetas = [
     ["Mars", "Marte"],
     ["Jupiter", "Júpiter"],
     ["Saturn", "Saturno"]
+
 ];
 
 function actualizarPlanetas() {
@@ -552,7 +1158,8 @@ function actualizarPlanetas() {
         return;
     }
 
-    const ahora = new Date();
+    const ahora =
+        new Date();
 
     const observador =
         new Astronomy.Observer(
@@ -561,47 +1168,55 @@ function actualizarPlanetas() {
             0
         );
 
-    cuerpos = planetas
-        .map(([body, nombre]) => {
+    cuerpos =
+        planetas
 
-            try {
+            .map(
+                ([body, nombre]) => {
 
-                const e =
-                    Astronomy.Equator(
-                        Astronomy.Body[body],
-                        ahora,
-                        observador,
-                        true,
-                        true
-                    );
+                    try {
 
-                const h =
-                    Astronomy.Horizon(
-                        ahora,
-                        observador,
-                        e.ra,
-                        e.dec,
-                        "normal"
-                    );
+                        const e =
+                            Astronomy.Equator(
+                                Astronomy.Body[body],
+                                ahora,
+                                observador,
+                                true,
+                                true
+                            );
 
-                return {
-                    nombre,
-                    az: h.azimuth,
-                    alt: h.altitude
-                };
+                        const h =
+                            Astronomy.Horizon(
+                                ahora,
+                                observador,
+                                e.ra,
+                                e.dec,
+                                "normal"
+                            );
 
-            } catch (error) {
+                        return {
 
-                console.error(
-                    `Error calculando ${nombre}:`,
-                    error
-                );
+                            nombre,
 
-                return null;
-            }
+                            az:
+                                h.azimuth,
 
-        })
-        .filter(Boolean);
+                            alt:
+                                h.altitude
+                        };
+
+                    } catch (error) {
+
+                        console.error(
+                            `Error calculando ${nombre}:`,
+                            error
+                        );
+
+                        return null;
+                    }
+                }
+            )
+            .filter(Boolean);
 
     render();
 }
@@ -622,10 +1237,14 @@ function dibujarEstrellas(
     for (const estrella of estrellas) {
 
         const ra =
-            raGrados(estrella.RA);
+            raGrados(
+                estrella.RA
+            );
 
         const dec =
-            decGrados(estrella.Dec);
+            decGrados(
+                estrella.Dec
+            );
 
         if (
             ra === null ||
@@ -657,7 +1276,9 @@ function dibujarEstrellas(
         }
 
         const mag =
-            Number(estrella.V);
+            Number(
+                estrella.V
+            );
 
         if (!Number.isFinite(mag)) {
             continue;
@@ -665,14 +1286,16 @@ function dibujarEstrellas(
 
         const radio =
             limitar(
-                3.8 - mag * 0.45,
+                3.8 -
+                mag * 0.45,
                 0.5,
                 5
             );
 
         const brillo =
             limitar(
-                1.2 - mag / 8,
+                1.2 -
+                mag / 8,
                 0.15,
                 1
             );
@@ -722,7 +1345,9 @@ function dibujarConstelaciones(
 
         let nombrePunto = null;
 
-        for (const linea of c.lineas || []) {
+        for (
+            const linea of c.lineas || []
+        ) {
 
             ctx.beginPath();
 
@@ -734,8 +1359,11 @@ function dibujarConstelaciones(
                 i++
             ) {
 
-                const p1 = linea[i];
-                const p2 = linea[i + 1];
+                const p1 =
+                    linea[i];
+
+                const p2 =
+                    linea[i + 1];
 
                 const h1 =
                     altAz(
@@ -822,10 +1450,14 @@ function dibujarCuerpos(
     cy
 ) {
 
-    ctx.textAlign = "center";
-    ctx.font = "13px Arial";
+    ctx.textAlign =
+        "center";
+
+    ctx.font =
+        "13px Arial";
 
     const tamaños = {
+
         Sol: 16,
         Luna: 13,
         Júpiter: 8,
@@ -836,6 +1468,7 @@ function dibujarCuerpos(
     };
 
     const colores = {
+
         Sol: "#fff0a0",
         Luna: "#e8e8e0",
         Júpiter: "#e8c28c",
@@ -891,7 +1524,8 @@ function dibujarCuerpos(
         );
     }
 
-    ctx.textAlign = "left";
+    ctx.textAlign =
+        "left";
 }
 
 // =====================================================
@@ -907,11 +1541,17 @@ function dibujarCielo() {
         return;
     }
 
-    const w = innerWidth;
-    const h = innerHeight;
+    const w =
+        innerWidth;
 
-    const cx = w / 2;
-    const cy = h / 2;
+    const h =
+        innerHeight;
+
+    const cx =
+        w / 2;
+
+    const cy =
+        h / 2;
 
     ctx.clearRect(
         0,
@@ -969,57 +1609,8 @@ function dibujarCielo() {
 }
 
 // =====================================================
-// ORIENTACIÓN DEL DISPOSITIVO
+// SENSORES
 // =====================================================
-
-function obtenerOrientacionPantalla() {
-
-    if (
-        screen.orientation &&
-        typeof screen.orientation.angle === "number"
-    ) {
-        return screen.orientation.angle;
-    }
-
-    return window.orientation || 0;
-}
-
-function obtenerHeadingSensor(evento) {
-
-    // iOS proporciona directamente el rumbo de brújula.
-    if (
-        typeof evento.webkitCompassHeading === "number" &&
-        Number.isFinite(evento.webkitCompassHeading)
-    ) {
-        return normalizar(
-            evento.webkitCompassHeading
-        );
-    }
-
-    // Android / otros navegadores.
-    if (
-        typeof evento.alpha !== "number" ||
-        !Number.isFinite(evento.alpha)
-    ) {
-        return null;
-    }
-
-    let h = 360 - evento.alpha;
-
-    const orientacion =
-        obtenerOrientacionPantalla();
-
-    // Ajuste por orientación física de la pantalla.
-    if (orientacion === 90) {
-        h += 90;
-    } else if (orientacion === -90 || orientacion === 270) {
-        h -= 90;
-    } else if (orientacion === 180) {
-        h += 180;
-    }
-
-    return normalizar(h);
-}
 
 function activarSensores() {
 
@@ -1031,122 +1622,42 @@ function activarSensores() {
 
     window.addEventListener(
         "deviceorientation",
-        manejarOrientacion,
+        e => {
+
+            if (modo !== "ar") {
+                return;
+            }
+
+            const alpha =
+                e.alpha;
+
+            const beta =
+                e.beta;
+
+            const gamma =
+                e.gamma;
+
+            if (
+                alpha === null ||
+                beta === null ||
+                gamma === null
+            ) {
+                return;
+            }
+
+            ultimoBeta =
+                beta;
+
+            actualizarCamaraDesdeSensor(
+                alpha,
+                beta,
+                gamma
+            );
+
+            render();
+        },
         true
     );
-
-    UI.activar.textContent =
-        "Sensores activados";
-}
-
-function manejarOrientacion(e) {
-
-    if (modo !== "ar") {
-        return;
-    }
-
-    const alpha = e.alpha;
-    const beta = e.beta;
-    const gamma = e.gamma;
-
-    if (
-        alpha === null ||
-        beta === null ||
-        gamma === null
-    ) {
-        return;
-    }
-
-    ultimoBeta = beta;
-    ultimoGamma = gamma;
-
-    const nuevoHeading =
-        obtenerHeadingSensor(e);
-
-    if (nuevoHeading === null) {
-        return;
-    }
-
-    ultimoHeading = nuevoHeading;
-
-    // Si nunca se ha calibrado el pitch,
-    // usamos la posición actual como referencia.
-    if (betaReferencia === null) {
-        betaReferencia = beta;
-    }
-
-    // Si nunca se ha calibrado el heading,
-    // conservamos el rumbo absoluto de la brújula.
-    if (headingReferencia === null) {
-        headingReferencia = nuevoHeading;
-    }
-
-    /*
-     * HEADING
-     *
-     * Usamos la diferencia respecto a la calibración.
-     * Esto permite pulsar "Calibrar" y tomar ese punto
-     * como centro de la vista.
-     */
-    const headingCalibrado =
-        normalizar(
-            nuevoHeading -
-            headingReferencia
-        );
-
-    /*
-     * PITCH
-     */
-    const nuevoPitch =
-        limitar(
-            beta - betaReferencia,
-            -89,
-            89
-        );
-
-    /*
-     * ROLL
-     *
-     * En algunos dispositivos gamma cambia de signo
-     * según la orientación. Lo mantenemos limitado.
-     */
-    const nuevoRoll =
-        limitar(
-            gamma,
-            -90,
-            90
-        );
-
-    // Suavizado
-    heading =
-        suavizarAngulo(
-            heading,
-            headingCalibrado,
-            0.18
-        );
-
-    pitch +=
-        (nuevoPitch - pitch) * 0.18;
-
-    roll +=
-        (nuevoRoll - roll) * 0.12;
-
-    // UI
-    UI.direccion.textContent =
-        `${normalizar(
-            heading
-        ).toFixed(1)}°`;
-
-    UI.altitud.textContent =
-        `${pitch.toFixed(1)}°`;
-
-    UI.debug.textContent =
-        `α:${alpha.toFixed(0)} ` +
-        `β:${beta.toFixed(0)} ` +
-        `γ:${gamma.toFixed(0)} ` +
-        `rumbo:${nuevoHeading.toFixed(1)}`;
-
-    render();
 }
 
 // =====================================================
@@ -1155,10 +1666,7 @@ function manejarOrientacion(e) {
 
 function calibrar() {
 
-    if (
-        ultimoBeta === null ||
-        ultimoHeading === null
-    ) {
+    if (ultimoBeta === null) {
 
         alert(
             "Activa los sensores primero."
@@ -1168,28 +1676,76 @@ function calibrar() {
     }
 
     /*
-     * Guardamos la orientación actual como
-     * nueva referencia.
+     * Queremos que la dirección actual de la cámara
+     * se convierta en el punto que estamos mirando.
+     *
+     * Para el mapa celeste necesitamos conservar
+     * el horizonte, así que calculamos solamente
+     * la diferencia horizontal.
      */
 
-    betaReferencia =
-        ultimoBeta;
+    const f =
+        camara3D.forward;
 
-    headingReferencia =
-        ultimoHeading;
+    const headingActual =
+        normalizar(
+            deg(
+                Math.atan2(
+                    f.x,
+                    f.y
+                )
+            )
+        );
 
-    heading = 0;
+    /*
+     * Si existe brújula del dispositivo,
+     * la usamos como referencia norte.
+     */
+
+    const elemento =
+        window.__ultimoDeviceOrientationEvent;
+
+    if (
+        elemento &&
+        typeof elemento.webkitCompassHeading ===
+        "number"
+    ) {
+
+        const brujula =
+            normalizar(
+                elemento.webkitCompassHeading
+            );
+
+        camara3D.offsetHeading =
+            brujula -
+            headingActual;
+
+    } else {
+
+        /*
+         * Sin brújula:
+         * mantenemos la dirección actual como referencia.
+         */
+
+        camara3D.offsetHeading =
+            -headingActual;
+    }
+
+    camara3D.calibrada =
+        true;
+
+    /*
+     * Reiniciar suavizado para evitar un salto.
+     */
+
+    camara3D.ultimoForward = null;
+    camara3D.ultimoRight = null;
+    camara3D.ultimoUp = null;
+
     pitch = 0;
-    roll = 0;
-
-    UI.direccion.textContent =
-        "0.0°";
 
     UI.altitud.textContent =
-        "0.0°";
-
-    UI.debug.textContent =
-        "Calibrado";
+        "0°";
 
     render();
 }
@@ -1219,7 +1775,8 @@ function actualizarFOV() {
 
 if (UI.fov) {
 
-    UI.fov.value = fovH;
+    UI.fov.value =
+        fovH;
 
     actualizarFOV();
 
@@ -1228,7 +1785,9 @@ if (UI.fov) {
         () => {
 
             fovH =
-                Number(UI.fov.value);
+                Number(
+                    UI.fov.value
+                );
 
             localStorage.setItem(
                 "fovH",
@@ -1237,10 +1796,8 @@ if (UI.fov) {
 
             actualizarFOV();
 
-            if (UI.fovTexto) {
-                UI.fovTexto.textContent =
-                    `${fovH}°`;
-            }
+            UI.fovTexto.textContent =
+                `${fovH}°`;
 
             render();
         }
@@ -1318,23 +1875,29 @@ canvas.addEventListener(
         }
 
         const dx =
-            e.clientX - inicioX;
+            e.clientX -
+            inicioX;
 
         const dy =
-            e.clientY - inicioY;
+            e.clientY -
+            inicioY;
 
         heading =
             normalizar(
                 inicioHeading -
-                dx * fovH / innerWidth
+                dx *
+                fovH /
+                innerWidth
             );
 
         pitch =
             limitar(
                 inicioPitch -
-                dy * fovV / innerHeight,
-                -85,
-                85
+                dy *
+                fovV /
+                innerHeight,
+                -89,
+                89
             );
 
         UI.direccion.textContent =
@@ -1350,6 +1913,7 @@ canvas.addEventListener(
 window.addEventListener(
     "pointerup",
     () => {
+
         arrastrando = false;
     }
 );
@@ -1378,25 +1942,21 @@ async function iniciarCamara() {
 
         const stream =
             await navigator.mediaDevices.getUserMedia({
+
                 video: {
+
                     facingMode: {
                         ideal: "environment"
                     }
                 },
+
                 audio: false
             });
 
         UI.camara.srcObject =
             stream;
 
-        UI.camara.setAttribute(
-            "playsinline",
-            ""
-        );
-
-        UI.camara.muted = true;
-
-        await UI.camara.play();
+        UI.camara.play?.();
 
     } catch (e) {
 
@@ -1414,6 +1974,20 @@ async function iniciarCamara() {
 }
 
 // =====================================================
+// GUARDAR ÚLTIMO EVENTO DE ORIENTACIÓN
+// =====================================================
+
+window.addEventListener(
+    "deviceorientation",
+    e => {
+
+        window.__ultimoDeviceOrientationEvent =
+            e;
+    },
+    true
+);
+
+// =====================================================
 // EVENTOS
 // =====================================================
 
@@ -1425,14 +1999,10 @@ if (UI.activar) {
 
             try {
 
-                /*
-                 * iOS requiere permiso explícito
-                 * para DeviceOrientation.
-                 */
-
                 if (
                     typeof DeviceOrientationEvent !==
                     "undefined" &&
+
                     typeof DeviceOrientationEvent.requestPermission ===
                     "function"
                 ) {
@@ -1441,7 +2011,10 @@ if (UI.activar) {
                         await DeviceOrientationEvent
                             .requestPermission();
 
-                    if (permiso !== "granted") {
+                    if (
+                        permiso !==
+                        "granted"
+                    ) {
 
                         UI.debug.textContent =
                             "Permiso de sensores denegado.";
@@ -1451,6 +2024,9 @@ if (UI.activar) {
                 }
 
                 activarSensores();
+
+                UI.activar.textContent =
+                    "Sensores activados";
 
             } catch (e) {
 
@@ -1476,32 +2052,6 @@ if (UI.modo) {
     UI.modo.addEventListener(
         "click",
         cambiarModo
-    );
-}
-
-// =====================================================
-// CAMBIO DE ORIENTACIÓN
-// =====================================================
-
-function manejarCambioOrientacion() {
-
-    actualizarFOV();
-
-    render();
-}
-
-if (screen.orientation) {
-
-    screen.orientation.addEventListener(
-        "change",
-        manejarCambioOrientacion
-    );
-
-} else {
-
-    window.addEventListener(
-        "orientationchange",
-        manejarCambioOrientacion
     );
 }
 
@@ -1549,26 +2099,6 @@ window.addEventListener(
 );
 
 // =====================================================
-// LIMPIAR CÁMARA AL SALIR
-// =====================================================
-
-window.addEventListener(
-    "beforeunload",
-    () => {
-
-        const stream =
-            UI.camara?.srcObject;
-
-        if (stream) {
-
-            stream.getTracks().forEach(
-                track => track.stop()
-            );
-        }
-    }
-);
-
-// =====================================================
 // INICIO
 // =====================================================
 
@@ -1586,9 +2116,13 @@ function escribir() {
         setInterval(
             () => {
 
-                if (i >= texto.length) {
+                if (
+                    i >= texto.length
+                ) {
 
-                    clearInterval(timer);
+                    clearInterval(
+                        timer
+                    );
 
                     obtenerUbicacion();
 
@@ -1603,11 +2137,12 @@ function escribir() {
         );
 }
 
-// Inicializar canvas
+// =====================================================
+// ARRANQUE
+// =====================================================
+
 ajustarCanvas();
 
-// Comenzar aplicación
 escribir();
 
-// Iniciar cámara
 iniciarCamara();
