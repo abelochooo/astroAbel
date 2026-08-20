@@ -156,10 +156,6 @@ async function obtenerUbicacion() {
 
             setInterval(actualizarCuerposCelestes, 30000);
 
-            actualizarFondoCieloLibre();
-
-            setInterval(actualizarFondoCieloLibre, 60000);
-
 
             setTimeout(() => {
 
@@ -691,112 +687,6 @@ function actualizarCuerposCelestes() {
 
 
     dibujarCielo();
-
-}
-
-
-// =====================================================
-// FONDO PANORÁMICO 360 (día/noche) — solo modo libre
-// =====================================================
-
-const fondoCieloLibreElemento =
-    document.getElementById("fondoCieloLibre");
-
-let esDeDia = null;
-
-
-function actualizarFondoCieloLibre() {
-
-    if (
-        latitud === undefined ||
-        longitud === undefined
-    ) {
-        return;
-    }
-
-    if (typeof Astronomy === "undefined") {
-        return;
-    }
-
-    if (!fondoCieloLibreElemento) {
-        return;
-    }
-
-
-    const ahora =
-        new Date();
-
-    const observador =
-        new Astronomy.Observer(latitud, longitud, 0);
-
-    const sol =
-        Astronomy.Equator(
-            Astronomy.Body.Sun,
-            ahora,
-            observador,
-            true,
-            true
-        );
-
-    const horizonteSol =
-        Astronomy.Horizon(
-            ahora,
-            observador,
-            sol.ra,
-            sol.dec,
-            "normal"
-        );
-
-
-    // Día si el sol está por encima del crepúsculo civil (-6°)
-
-    const esDeDiaAhora =
-        horizonteSol.altitude > -6;
-
-
-    // Solo tocamos el DOM si de verdad cambia, para no repintar de más
-
-    if (esDeDiaAhora !== esDeDia) {
-
-        esDeDia =
-            esDeDiaAhora;
-
-        fondoCieloLibreElemento.style.backgroundImage =
-            esDeDia ?
-                'url("./cielo-dia.jpg")' :
-                'url("./cielo-noche.jpg")';
-
-    }
-
-}
-
-
-// Desplaza el fondo panorámico según heading/pitch actuales,
-// para que gire como si fuera una esfera de 360°.
-
-function actualizarPosicionFondoLibre() {
-
-    if (!fondoCieloLibreElemento) {
-        return;
-    }
-
-    if (modo !== "libre") {
-        return;
-    }
-
-
-    const xPorcentaje =
-        (heading / 360) * 100;
-
-    // pitch: -85 (suelo) a 85 (cielo) → 100% a 0% (arriba del todo
-    // de la imagen cuando miras hacia arriba)
-
-    const yPorcentaje =
-        50 - (pitch / 85) * 50;
-
-
-    fondoCieloLibreElemento.style.backgroundPosition =
-        `${xPorcentaje}% ${yPorcentaje}%`;
 
 }
 
@@ -1483,9 +1373,6 @@ function dibujarCielo() {
     ) {
         return;
     }
-
-
-    actualizarPosicionFondoLibre();
 
 
     const ancho =
