@@ -1,4 +1,5 @@
 const $ = id => document.getElementById(id);
+
 const canvas = $("cieloCamara");
 const ctx = canvas.getContext("2d");
 
@@ -18,12 +19,13 @@ const UI = {
     fovTexto: $("fovValor")
 };
 
-
 // =====================================================
 // ESTADO
 // =====================================================
 
-let lat, lon;
+let lat;
+let lon;
+
 let estrellas = [];
 let constelaciones = [];
 let cuerpos = [];
@@ -37,7 +39,7 @@ let roll = 0;
 let betaReferencia = null;
 let ultimoBeta = null;
 
-let fovH = Number(localStorage.fovH) || 66;
+let fovH = Number(localStorage.getItem("fovH")) || 66;
 let fovV = 50;
 
 let renderPendiente = false;
@@ -48,6 +50,7 @@ let inicioY = 0;
 let inicioHeading = 0;
 let inicioPitch = 0;
 
+let sensoresActivados = false;
 
 // =====================================================
 // UTILIDADES
@@ -72,7 +75,6 @@ function suavizarAngulo(actual, nuevo, factor) {
     );
 }
 
-
 // =====================================================
 // RENDER
 // =====================================================
@@ -88,14 +90,15 @@ function render() {
     });
 }
 
-
 // =====================================================
 // UBICACIÓN
 // =====================================================
 
 function obtenerUbicacion() {
     if (!navigator.geolocation) {
-        mostrarUbicacionError("Geolocalización no disponible.");
+        mostrarUbicacionError(
+            "Geolocalización no disponible."
+        );
         return;
     }
 
@@ -107,23 +110,37 @@ function obtenerUbicacion() {
             UI.ubicacion.textContent =
                 await obtenerCiudad(lat, lon);
 
-            await Promise.all([
-                cargar("estrellas.json").then(x => estrellas = x),
-                cargar("constelaciones.json").then(x => constelaciones = x)
-            ]);
+            try {
+                const resultados = await Promise.all([
+                    cargar("estrellas.json"),
+                    cargar("constelaciones.json")
+                ]);
+
+                estrellas = resultados[0];
+                constelaciones = resultados[1];
+            } catch (error) {
+                console.error(
+                    "Error cargando los archivos JSON:",
+                    error
+                );
+            }
 
             actualizarPlanetas();
             render();
 
             setInterval(actualizarPlanetas, 30000);
 
-            setTimeout(() => UI.pantalla?.remove(), 2500);
+            setTimeout(() => {
+                UI.pantalla?.remove();
+            }, 2500);
         },
+
         error => {
             mostrarUbicacionError(
                 `Error ${error.code}: ${error.message}`
             );
         },
+
         {
             enableHighAccuracy: true,
             timeout: 10000,
@@ -134,57 +151,81 @@ function obtenerUbicacion() {
 
 async function obtenerCiudad(lat, lon) {
     try {
-        const r = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`
-        );
+        const url =
+            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`;
 
-        const { address } = await r.json();
+        const respuesta = await fetch(url);
+
+        if (!respuesta.ok) {
+            throw new Error("Error en Nominatim");
+        }
+
+        const datos = await respuesta.json();
+        const address = datos.address || {};
 
         const ciudad =
             address.city ||
             address.town ||
             address.village ||
             address.municipality ||
+            address.county ||
             "Ubicación desconocida";
 
         return `${ciudad}, ${address.country || ""}`;
 
-    } catch {
+    } catch (error) {
+        console.error(
+            "No se pudo obtener la ciudad:",
+            error
+        );
+
         return "Ubicación obtenida";
     }
 }
 
 function mostrarUbicacionError(texto) {
-    UI.mensaje.textContent = "No se pudo obtener tu ubicación";
+    UI.mensaje.textContent =
+        "No se pudo obtener tu ubicación";
+
     UI.ubicacion.textContent = texto;
 
-    setTimeout(() => UI.pantalla?.remove(), 2500);
+    setTimeout(() => {
+        UI.pantalla?.remove();
+    }, 2500);
 }
-
 
 // =====================================================
 // JSON
 // =====================================================
 
 async function cargar(archivo) {
-    const r = await fetch(archivo);
+    const respuesta = await fetch(archivo);
 
-    if (!r.ok) {
-        throw new Error(`No se pudo cargar ${archivo}`);
+    if (!respuesta.ok) {
+        throw new Error(
+            `No se pudo cargar ${archivo}`
+        );
     }
 
-    return r.json();
+    return await respuesta.json();
 }
-
 
 // =====================================================
 // RA / DEC
 // =====================================================
 
 function raGrados(ra) {
-    const p = ra?.match(/(\d+)h\s*(\d+)m\s*([\d.]+)s/i);
+    if (typeof ra !== "string") {
+        return null;
+    }
 
-    if (!p) return null;
+    const p = ra.match(
+        /(\d+)h\s*(\d+)m\s*([\d.]+)s/i
+    );
+
+    if (!p) {
+        return null;
+    }
 
     return (
         Number(p[1]) +
@@ -194,11 +235,17 @@ function raGrados(ra) {
 }
 
 function decGrados(dec) {
-    const p = dec?.match(
+    if (typeof dec !== "string") {
+        return null;
+    }
+
+    const p = dec.match(
         /([+-])\s*(\d+)[°º]\s*(\d+)[′']\s*(\d+(?:\.\d+)?)[″"]/u
     );
 
-    if (!p) return null;
+    if (!p) {
+        return null;
+    }
 
     const signo = p[1] === "-" ? -1 : 1;
 
@@ -209,24 +256,25 @@ function decGrados(dec) {
     );
 }
 
-
 // =====================================================
 // TIEMPO SIDERAL
 // =====================================================
 
 function tiempoSideral() {
-    const jd = Date.now() / 86400000 + 2440587.5;
-    const T = (jd - 2451545) / 36525;
+    const jd =
+        Date.now() / 86400000 + 2440587.5;
+
+    const T =
+        (jd - 2451545.0) / 36525;
 
     let gmst =
         280.46061837 +
-        360.98564736629 * (jd - 2451545) +
+        360.98564736629 * (jd - 2451545.0) +
         0.000387933 * T * T -
         T * T * T / 38710000;
 
     return normalizar(gmst + lon);
 }
-
 
 // =====================================================
 // RA / DEC → ALT / AZ
@@ -235,7 +283,9 @@ function tiempoSideral() {
 function altAz(ra, dec, lst) {
     let H = normalizar(lst - ra);
 
-    if (H > 180) H -= 360;
+    if (H > 180) {
+        H -= 360;
+    }
 
     const L = rad(lat);
     const D = rad(dec);
@@ -244,7 +294,9 @@ function altAz(ra, dec, lst) {
     const alt = Math.asin(
         limitar(
             Math.sin(L) * Math.sin(D) +
-            Math.cos(L) * Math.cos(D) * Math.cos(h),
+            Math.cos(L) *
+            Math.cos(D) *
+            Math.cos(h),
             -1,
             1
         )
@@ -262,7 +314,6 @@ function altAz(ra, dec, lst) {
     };
 }
 
-
 // =====================================================
 // VECTORES
 // =====================================================
@@ -279,7 +330,11 @@ function vector(az, alt) {
 }
 
 function dot(a, b) {
-    return a.x * b.x + a.y * b.y + a.z * b.z;
+    return (
+        a.x * b.x +
+        a.y * b.y +
+        a.z * b.z
+    );
 }
 
 function cross(a, b) {
@@ -291,7 +346,8 @@ function cross(a, b) {
 }
 
 function unit(v) {
-    const n = Math.hypot(v.x, v.y, v.z) || 1;
+    const n =
+        Math.hypot(v.x, v.y, v.z) || 1;
 
     return {
         x: v.x / n,
@@ -300,63 +356,120 @@ function unit(v) {
     };
 }
 
-
 // =====================================================
 // CÁMARA 3D
 // =====================================================
 
 function baseCamara() {
-    const forward = vector(heading, pitch);
+    const forward =
+        vector(heading, pitch);
 
     let right = unit(
-        cross(forward, { x: 0, y: 0, z: 1 })
+        cross(
+            forward,
+            {
+                x: 0,
+                y: 0,
+                z: 1
+            }
+        )
     );
 
-    if (Math.hypot(right.x, right.y) < 0.0001) {
+    if (
+        Math.hypot(right.x, right.y) < 0.0001
+    ) {
         right = unit(
-            cross(forward, { x: 1, y: 0, z: 0 })
+            cross(
+                forward,
+                {
+                    x: 1,
+                    y: 0,
+                    z: 0
+                }
+            )
         );
     }
 
-    let up = unit(cross(right, forward));
+    let up = unit(
+        cross(right, forward)
+    );
 
     // Roll
     const r = rad(roll);
 
-    if (roll) {
+    if (roll !== 0) {
         const oldRight = { ...right };
         const oldUp = { ...up };
 
         right = {
-            x: oldRight.x * Math.cos(r) + oldUp.x * Math.sin(r),
-            y: oldRight.y * Math.cos(r) + oldUp.y * Math.sin(r),
-            z: oldRight.z * Math.cos(r) + oldUp.z * Math.sin(r)
+            x:
+                oldRight.x * Math.cos(r) +
+                oldUp.x * Math.sin(r),
+
+            y:
+                oldRight.y * Math.cos(r) +
+                oldUp.y * Math.sin(r),
+
+            z:
+                oldRight.z * Math.cos(r) +
+                oldUp.z * Math.sin(r)
         };
 
         up = {
-            x: -oldRight.x * Math.sin(r) + oldUp.x * Math.cos(r),
-            y: -oldRight.y * Math.sin(r) + oldUp.y * Math.cos(r),
-            z: -oldRight.z * Math.sin(r) + oldUp.z * Math.cos(r)
+            x:
+                -oldRight.x * Math.sin(r) +
+                oldUp.x * Math.cos(r),
+
+            y:
+                -oldRight.y * Math.sin(r) +
+                oldUp.y * Math.cos(r),
+
+            z:
+                -oldRight.z * Math.sin(r) +
+                oldUp.z * Math.cos(r)
         };
     }
 
-    return { forward, right, up };
+    return {
+        forward,
+        right,
+        up
+    };
 }
-
 
 // =====================================================
 // PROYECCIÓN
 // =====================================================
 
-function proyectar(az, alt, base, fx, fy, cx, cy) {
+function proyectar(
+    az,
+    alt,
+    base,
+    fx,
+    fy,
+    cx,
+    cy
+) {
     const p = vector(az, alt);
 
-    const frente = dot(p, base.forward);
+    const frente =
+        dot(p, base.forward);
 
-    if (frente <= 0.001) return null;
+    if (frente <= 0.001) {
+        return null;
+    }
 
-    const x = cx + fx * dot(p, base.right) / frente;
-    const y = cy - fy * dot(p, base.up) / frente;
+    const x =
+        cx +
+        fx *
+        dot(p, base.right) /
+        frente;
+
+    const y =
+        cy -
+        fy *
+        dot(p, base.up) /
+        frente;
 
     const margen = 100;
 
@@ -369,9 +482,11 @@ function proyectar(az, alt, base, fx, fy, cx, cy) {
         return null;
     }
 
-    return { x, y };
+    return {
+        x,
+        y
+    };
 }
-
 
 // =====================================================
 // PLANETAS
@@ -392,44 +507,59 @@ function actualizarPlanetas() {
         lat === undefined ||
         lon === undefined ||
         typeof Astronomy === "undefined"
-    ) return;
+    ) {
+        return;
+    }
 
     const ahora = new Date();
+
     const observador =
-        new Astronomy.Observer(lat, lon, 0);
+        new Astronomy.Observer(
+            lat,
+            lon,
+            0
+        );
 
-    cuerpos = planetas.map(([body, nombre]) => {
-        try {
-            const e = Astronomy.Equator(
-                Astronomy.Body[body],
-                ahora,
-                observador,
-                true,
-                true
-            );
+    cuerpos = planetas
+        .map(([body, nombre]) => {
+            try {
+                const e =
+                    Astronomy.Equator(
+                        Astronomy.Body[body],
+                        ahora,
+                        observador,
+                        true,
+                        true
+                    );
 
-            const h = Astronomy.Horizon(
-                ahora,
-                observador,
-                e.ra,
-                e.dec,
-                "normal"
-            );
+                const h =
+                    Astronomy.Horizon(
+                        ahora,
+                        observador,
+                        e.ra,
+                        e.dec,
+                        "normal"
+                    );
 
-            return {
-                nombre,
-                az: h.azimuth,
-                alt: h.altitude
-            };
+                return {
+                    nombre,
+                    az: h.azimuth,
+                    alt: h.altitude
+                };
 
-        } catch {
-            return null;
-        }
-    }).filter(Boolean);
+            } catch (error) {
+                console.error(
+                    `Error calculando ${nombre}:`,
+                    error
+                );
+
+                return null;
+            }
+        })
+        .filter(Boolean);
 
     render();
 }
-
 
 // =====================================================
 // ESTRELLAS
@@ -444,42 +574,64 @@ function dibujarEstrellas(
     cy
 ) {
     for (const estrella of estrellas) {
-        const ra = raGrados(estrella.RA);
-        const dec = decGrados(estrella.Dec);
+        const ra =
+            raGrados(estrella.RA);
 
-        if (ra === null || dec === null) continue;
+        const dec =
+            decGrados(estrella.Dec);
 
-        const h = altAz(ra, dec, lst);
+        if (
+            ra === null ||
+            dec === null
+        ) {
+            continue;
+        }
 
-        const p = proyectar(
-            h.az,
-            h.alt,
-            base,
-            fx,
-            fy,
-            cx,
-            cy
-        );
+        const h =
+            altAz(
+                ra,
+                dec,
+                lst
+            );
 
-        if (!p) continue;
+        const p =
+            proyectar(
+                h.az,
+                h.alt,
+                base,
+                fx,
+                fy,
+                cx,
+                cy
+            );
 
-        const mag = Number(estrella.V);
+        if (!p) {
+            continue;
+        }
 
-        if (!Number.isFinite(mag)) continue;
+        const mag =
+            Number(estrella.V);
 
-        const radio = limitar(
-            3.8 - mag * 0.45,
-            0.5,
-            5
-        );
+        if (!Number.isFinite(mag)) {
+            continue;
+        }
 
-        const brillo = limitar(
-            1.2 - mag / 8,
-            0.15,
-            1
-        );
+        const radio =
+            limitar(
+                3.8 - mag * 0.45,
+                0.5,
+                5
+            );
+
+        const brillo =
+            limitar(
+                1.2 - mag / 8,
+                0.15,
+                1
+            );
 
         ctx.beginPath();
+
         ctx.arc(
             p.x,
             p.y,
@@ -494,7 +646,6 @@ function dibujarEstrellas(
         ctx.fill();
     }
 }
-
 
 // =====================================================
 // CONSTELACIONES
@@ -522,51 +673,81 @@ function dibujarConstelaciones(
     for (const c of constelaciones) {
         let nombrePunto = null;
 
-        for (const linea of c.lineas || []) {
+        for (
+            const linea of c.lineas || []
+        ) {
             ctx.beginPath();
 
             let dibujado = false;
 
-            for (let i = 0; i < linea.length - 1; i++) {
+            for (
+                let i = 0;
+                i < linea.length - 1;
+                i++
+            ) {
                 const p1 = linea[i];
                 const p2 = linea[i + 1];
 
-                const a = proyectar(
-                    ...Object.values(altAz(
+                const h1 =
+                    altAz(
                         p1[0],
                         p1[1],
                         lst
-                    )),
-                    base,
-                    fx,
-                    fy,
-                    cx,
-                    cy
-                );
+                    );
 
-                const b = proyectar(
-                    ...Object.values(altAz(
+                const h2 =
+                    altAz(
                         p2[0],
                         p2[1],
                         lst
-                    )),
-                    base,
-                    fx,
-                    fy,
-                    cx,
-                    cy
+                    );
+
+                const a =
+                    proyectar(
+                        h1.az,
+                        h1.alt,
+                        base,
+                        fx,
+                        fy,
+                        cx,
+                        cy
+                    );
+
+                const b =
+                    proyectar(
+                        h2.az,
+                        h2.alt,
+                        base,
+                        fx,
+                        fy,
+                        cx,
+                        cy
+                    );
+
+                if (!a || !b) {
+                    continue;
+                }
+
+                ctx.moveTo(
+                    a.x,
+                    a.y
                 );
 
-                if (!a || !b) continue;
+                ctx.lineTo(
+                    b.x,
+                    b.y
+                );
 
-                ctx.moveTo(a.x, a.y);
-                ctx.lineTo(b.x, b.y);
+                if (!nombrePunto) {
+                    nombrePunto = a;
+                }
 
-                nombrePunto ||= a;
                 dibujado = true;
             }
 
-            if (dibujado) ctx.stroke();
+            if (dibujado) {
+                ctx.stroke();
+            }
         }
 
         if (nombrePunto) {
@@ -578,7 +759,6 @@ function dibujarConstelaciones(
         }
     }
 }
-
 
 // =====================================================
 // CUERPOS CELESTES
@@ -615,17 +795,20 @@ function dibujarCuerpos(
     };
 
     for (const cuerpo of cuerpos) {
-        const p = proyectar(
-            cuerpo.az,
-            cuerpo.alt,
-            base,
-            fx,
-            fy,
-            cx,
-            cy
-        );
+        const p =
+            proyectar(
+                cuerpo.az,
+                cuerpo.alt,
+                base,
+                fx,
+                fy,
+                cx,
+                cy
+            );
 
-        if (!p) continue;
+        if (!p) {
+            continue;
+        }
 
         const radio =
             tamaños[cuerpo.nombre] || 5;
@@ -659,7 +842,6 @@ function dibujarCuerpos(
     ctx.textAlign = "left";
 }
 
-
 // =====================================================
 // DIBUJAR TODO
 // =====================================================
@@ -668,7 +850,9 @@ function dibujarCielo() {
     if (
         lat === undefined ||
         lon === undefined
-    ) return;
+    ) {
+        return;
+    }
 
     const w = innerWidth;
     const h = innerHeight;
@@ -676,42 +860,77 @@ function dibujarCielo() {
     const cx = w / 2;
     const cy = h / 2;
 
-    ctx.clearRect(0, 0, w, h);
+    ctx.clearRect(
+        0,
+        0,
+        w,
+        h
+    );
 
-    const base = baseCamara();
-    const lst = tiempoSideral();
+    const base =
+        baseCamara();
+
+    const lst =
+        tiempoSideral();
 
     const fx =
-        cx / Math.tan(rad(fovH) / 2);
+        cx /
+        Math.tan(
+            rad(fovH) / 2
+        );
 
     const fy =
-        cy / Math.tan(rad(fovV) / 2);
+        cy /
+        Math.tan(
+            rad(fovV) / 2
+        );
 
     if (constelaciones.length) {
         dibujarConstelaciones(
-            lst, base, fx, fy, cx, cy
+            lst,
+            base,
+            fx,
+            fy,
+            cx,
+            cy
         );
     }
 
     dibujarEstrellas(
-        lst, base, fx, fy, cx, cy
+        lst,
+        base,
+        fx,
+        fy,
+        cx,
+        cy
     );
 
     dibujarCuerpos(
-        base, fx, fy, cx, cy
+        base,
+        fx,
+        fy,
+        cx,
+        cy
     );
 }
-
 
 // =====================================================
 // SENSORES
 // =====================================================
 
 function activarSensores() {
+    if (sensoresActivados) {
+        return;
+    }
+
+    sensoresActivados = true;
+
     window.addEventListener(
         "deviceorientation",
         e => {
-            if (modo !== "ar") return;
+            if (modo !== "ar") {
+                return;
+            }
 
             const alpha = e.alpha;
             const beta = e.beta;
@@ -721,16 +940,27 @@ function activarSensores() {
                 alpha === null ||
                 beta === null ||
                 gamma === null
-            ) return;
+            ) {
+                return;
+            }
 
             ultimoBeta = beta;
 
-            let nuevoHeading =
-                typeof e.webkitCompassHeading === "number"
-                    ? e.webkitCompassHeading
-                    : 360 - alpha;
+            let nuevoHeading;
 
-            nuevoHeading = normalizar(nuevoHeading);
+            if (
+                typeof e.webkitCompassHeading ===
+                "number"
+            ) {
+                nuevoHeading =
+                    e.webkitCompassHeading;
+            } else {
+                nuevoHeading =
+                    360 - alpha;
+            }
+
+            nuevoHeading =
+                normalizar(nuevoHeading);
 
             const referencia =
                 betaReferencia ?? 90;
@@ -743,7 +973,11 @@ function activarSensores() {
                 );
 
             const nuevoRoll =
-                limitar(gamma, -90, 90);
+                limitar(
+                    gamma,
+                    -90,
+                    90
+                );
 
             heading =
                 suavizarAngulo(
@@ -753,10 +987,12 @@ function activarSensores() {
                 );
 
             pitch +=
-                (nuevoPitch - pitch) * 0.2;
+                (nuevoPitch - pitch) *
+                0.2;
 
             roll +=
-                (nuevoRoll - roll) * 0.15;
+                (nuevoRoll - roll) *
+                0.15;
 
             UI.direccion.textContent =
                 `${heading.toFixed(1)}°`;
@@ -780,7 +1016,6 @@ function activarSensores() {
     );
 }
 
-
 // =====================================================
 // CALIBRACIÓN
 // =====================================================
@@ -790,51 +1025,73 @@ function calibrar() {
         alert(
             "Activa los sensores primero."
         );
+
         return;
     }
 
-    betaReferencia = ultimoBeta;
+    betaReferencia =
+        ultimoBeta;
+
     pitch = 0;
 
-    UI.altitud.textContent = "0°";
+    UI.altitud.textContent =
+        "0°";
 
     render();
 }
-
 
 // =====================================================
 // FOV
 // =====================================================
 
 function actualizarFOV() {
+    if (!innerWidth) {
+        return;
+    }
+
     fovV =
-        2 * deg(
+        2 *
+        deg(
             Math.atan(
-                Math.tan(rad(fovH) / 2) *
+                Math.tan(
+                    rad(fovH) / 2
+                ) *
                 innerHeight /
                 innerWidth
             )
         );
 }
 
-UI.fov.value = fovH;
-actualizarFOV();
-
-UI.fov.addEventListener("input", () => {
-    fovH = Number(UI.fov.value);
-
-    localStorage.fovH = fovH;
+if (UI.fov) {
+    UI.fov.value = fovH;
 
     actualizarFOV();
 
+    UI.fov.addEventListener(
+        "input",
+        () => {
+            fovH =
+                Number(UI.fov.value);
+
+            localStorage.setItem(
+                "fovH",
+                fovH
+            );
+
+            actualizarFOV();
+
+            UI.fovTexto.textContent =
+                `${fovH}°`;
+
+            render();
+        }
+    );
+}
+
+if (UI.fovTexto) {
     UI.fovTexto.textContent =
         `${fovH}°`;
-
-    render();
-});
-
-UI.fovTexto.textContent = `${fovH}°`;
-
+}
 
 // =====================================================
 // MODO LIBRE
@@ -859,7 +1116,6 @@ function cambiarModo() {
     render();
 }
 
-
 // =====================================================
 // ARRASTRE
 // =====================================================
@@ -867,15 +1123,23 @@ function cambiarModo() {
 canvas.addEventListener(
     "pointerdown",
     e => {
-        if (modo !== "libre") return;
+        if (modo !== "libre") {
+            return;
+        }
 
         arrastrando = true;
 
-        inicioX = e.clientX;
-        inicioY = e.clientY;
+        inicioX =
+            e.clientX;
 
-        inicioHeading = heading;
-        inicioPitch = pitch;
+        inicioY =
+            e.clientY;
+
+        inicioHeading =
+            heading;
+
+        inicioPitch =
+            pitch;
 
         canvas.setPointerCapture?.(
             e.pointerId
@@ -886,7 +1150,9 @@ canvas.addEventListener(
 canvas.addEventListener(
     "pointermove",
     e => {
-        if (!arrastrando) return;
+        if (!arrastrando) {
+            return;
+        }
 
         const dx =
             e.clientX - inicioX;
@@ -920,34 +1186,58 @@ canvas.addEventListener(
 
 window.addEventListener(
     "pointerup",
-    () => arrastrando = false
+    () => {
+        arrastrando = false;
+    }
 );
-
 
 // =====================================================
 // CÁMARA
 // =====================================================
 
 async function iniciarCamara() {
+    if (
+        !navigator.mediaDevices ||
+        !navigator.mediaDevices.getUserMedia
+    ) {
+        UI.error.textContent =
+            "La cámara no está disponible en este navegador.";
+
+        UI.error.style.display =
+            "block";
+
+        return;
+    }
+
     try {
         const stream =
             await navigator.mediaDevices.getUserMedia({
                 video: {
-                    facingMode: "environment"
+                    facingMode: {
+                        ideal: "environment"
+                    }
                 },
                 audio: false
             });
 
-        UI.camara.srcObject = stream;
+        UI.camara.srcObject =
+            stream;
+
+        UI.camara.play?.();
 
     } catch (e) {
+        console.error(
+            "Error de cámara:",
+            e
+        );
+
         UI.error.textContent =
             `No se pudo iniciar la cámara: ${e.name}`;
 
-        UI.error.style.display = "block";
+        UI.error.style.display =
+            "block";
     }
 }
-
 
 // =====================================================
 // EVENTOS
@@ -958,7 +1248,8 @@ UI.activar.addEventListener(
     async () => {
         try {
             if (
-                typeof DeviceOrientationEvent !== "undefined" &&
+                typeof DeviceOrientationEvent !==
+                    "undefined" &&
                 typeof DeviceOrientationEvent.requestPermission ===
                     "function"
             ) {
@@ -966,7 +1257,12 @@ UI.activar.addEventListener(
                     await DeviceOrientationEvent
                         .requestPermission();
 
-                if (permiso !== "granted") return;
+                if (permiso !== "granted") {
+                    UI.debug.textContent =
+                        "Permiso de sensores denegado.";
+
+                    return;
+                }
             }
 
             activarSensores();
@@ -976,6 +1272,9 @@ UI.activar.addEventListener(
 
         } catch (e) {
             console.error(e);
+
+            UI.debug.textContent =
+                "No se pudieron activar los sensores.";
         }
     }
 );
@@ -990,54 +1289,81 @@ UI.modo.addEventListener(
     cambiarModo
 );
 
-window.addEventListener(
-    "resize",
-    () => {
-        const dpr =
-            Math.min(devicePixelRatio || 1, 2);
+// =====================================================
+// RESIZE / CANVAS
+// =====================================================
 
-        canvas.width =
-            innerWidth * dpr;
-
-        canvas.height =
-            innerHeight * dpr;
-
-        canvas.style.width =
-            `${innerWidth}px`;
-
-        canvas.style.height =
-            `${innerHeight}px`;
-
-        ctx.setTransform(
-            dpr, 0, 0, dpr, 0, 0
+function ajustarCanvas() {
+    const dpr =
+        Math.min(
+            window.devicePixelRatio || 1,
+            2
         );
 
-        actualizarFOV();
-        render();
-    }
-);
+    canvas.width =
+        innerWidth * dpr;
 
+    canvas.height =
+        innerHeight * dpr;
+
+    canvas.style.width =
+        `${innerWidth}px`;
+
+    canvas.style.height =
+        `${innerHeight}px`;
+
+    ctx.setTransform(
+        dpr,
+        0,
+        0,
+        dpr,
+        0,
+        0
+    );
+
+    actualizarFOV();
+
+    render();
+}
+
+window.addEventListener(
+    "resize",
+    ajustarCanvas
+);
 
 // =====================================================
 // INICIO
 // =====================================================
 
 function escribir() {
-    const texto = "Tu ubicación es";
+    const texto =
+        "Tu ubicación es";
+
     let i = 0;
 
-    const timer = setInterval(() => {
-        if (i >= texto.length) {
-            clearInterval(timer);
-            obtenerUbicacion();
-            return;
-        }
+    UI.mensaje.textContent = "";
 
-        UI.mensaje.textContent +=
-            texto[i++];
+    const timer =
+        setInterval(() => {
+            if (i >= texto.length) {
+                clearInterval(timer);
 
-    }, 60);
+                obtenerUbicacion();
+
+                return;
+            }
+
+            UI.mensaje.textContent +=
+                texto[i++];
+
+        }, 60);
 }
 
+// Inicializar canvas inmediatamente
+ajustarCanvas();
+
+// Comenzar aplicación
 escribir();
+
+// Iniciar cámara
 iniciarCamara();
