@@ -129,11 +129,73 @@ export function normalizarVector(vector) {
 
 export function crearCamara() {
 
+    // ========================================================
+    // MODO AR
+    // ========================================================
+
+    if (
+        estado.modo === "ar" &&
+        estado.orientacion &&
+        estado.orientacion.disponible
+    ) {
+
+        return {
+
+            haciaDondeMiro: {
+                x:
+                    estado.orientacion
+                        .haciaDondeMiro.x,
+
+                y:
+                    estado.orientacion
+                        .haciaDondeMiro.y,
+
+                z:
+                    estado.orientacion
+                        .haciaDondeMiro.z
+            },
+
+            derecha: {
+                x:
+                    estado.orientacion
+                        .derecha.x,
+
+                y:
+                    estado.orientacion
+                        .derecha.y,
+
+                z:
+                    estado.orientacion
+                        .derecha.z
+            },
+
+            arriba: {
+                x:
+                    estado.orientacion
+                        .arriba.x,
+
+                y:
+                    estado.orientacion
+                        .arriba.y,
+
+                z:
+                    estado.orientacion
+                        .arriba.z
+            }
+        };
+    }
+
+
+    // ========================================================
+    // MODO MAPA LIBRE
+    // ========================================================
+
     const haciaDondeMiro =
         crearVector(
             estado.direccion,
             estado.altura
         );
+
 
     let derecha =
         normalizarVector(
@@ -146,6 +208,7 @@ export function crearCamara() {
                 }
             )
         );
+
 
     if (
         Math.hypot(
@@ -167,6 +230,7 @@ export function crearCamara() {
             );
     }
 
+
     const arriba =
         normalizarVector(
             productoCruz(
@@ -175,13 +239,14 @@ export function crearCamara() {
             )
         );
 
-    return {
 
+    return {
         haciaDondeMiro,
         derecha,
         arriba
     };
 }
+
 
 
 export function ponerEnPantalla(

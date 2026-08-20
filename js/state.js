@@ -8,10 +8,43 @@ export const estado = {
 
     modo: "ar",
 
+    // --------------------------------------------------
+    // ORIENTACIÓN DEL CIELO
+    // --------------------------------------------------
+
     direccion: 0,
     altura: 0,
     inclinacion: 0,
 
+    orientacion: {
+        haciaDondeMiro: {
+            x: 0,
+            y: 1,
+            z: 0
+        },
+
+        derecha: {
+            x: 1,
+            y: 0,
+            z: 0
+        },
+
+        arriba: {
+            x: 0,
+            y: 0,
+            z: 1
+        },
+
+        disponible: false,
+        absoluta: false
+    },
+
+    // Últimos valores del sensor
+    ultimaAlpha: null,
+    ultimaBeta: null,
+    ultimaGamma: null,
+
+    // Compatibilidad con el resto de la aplicación
     ultimaBeta: null,
     referenciaBeta: null,
 

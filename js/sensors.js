@@ -3,24 +3,30 @@ import {
 } from "./state.js";
 
 import {
-    normalizar,
-    limitar,
-    moverSuave
+    normalizar
 } from "./utils.js";
+
+import {
+    actualizarOrientacion,
+    reiniciarOrientacion
+} from "./orientation.js";
 
 import {
     actualizarPantalla
 } from "./renderer.js";
+
 
 const direccionTexto =
     document.getElementById(
         "direccion"
     );
 
+
 const alturaTexto =
     document.getElementById(
         "altitud"
     );
+
 
 const debug =
     document.getElementById(
@@ -28,27 +34,49 @@ const debug =
     );
 
 
+let ultimoEventoAbsoluto = 0;
+
+
+// ============================================================
+// PERMISOS
+// ============================================================
+
 export async function solicitarPermisoSensores() {
 
     if (
-        typeof DeviceOrientationEvent !==
-        "undefined" &&
+        typeof DeviceOrientationEvent ===
+        "undefined"
+    ) {
+        return false;
+    }
 
+
+    if (
         typeof DeviceOrientationEvent
             .requestPermission ===
-            "function"
+        "function"
     ) {
+
+        /*
+         * true pide también permiso para orientación absoluta /
+         * magnetómetro cuando el navegador lo soporta.
+         */
 
         const permiso =
             await DeviceOrientationEvent
-                .requestPermission();
+                .requestPermission(true);
 
         return permiso === "granted";
     }
 
+
     return true;
 }
 
+
+// ============================================================
+// ACTIVAR SENSORES
+// ============================================================
 
 export function activarSensores() {
 
@@ -58,149 +86,332 @@ export function activarSensores() {
         return;
     }
 
+
     estado.sensoresEncendidos =
         true;
+
+
+    /*
+     * Primero escuchamos orientación absoluta.
+     *
+     * Chromium puede proporcionar
+     * deviceorientationabsolute.
+     *
+     * Safari normalmente utiliza
+     * deviceorientation + webkitCompassHeading.
+     */
+
+    window.addEventListener(
+        "deviceorientationabsolute",
+        manejarOrientacionAbsoluta,
+        true
+    );
+
 
     window.addEventListener(
         "deviceorientation",
         manejarOrientacion,
         true
     );
+
+
+    if (
+        screen.orientation
+    ) {
+
+        screen.orientation.addEventListener(
+            "change",
+            () => {
+
+                if (
+                    estado.ultimaAlpha !== null &&
+                    estado.ultimaBeta !== null &&
+                    estado.ultimaGamma !== null
+                ) {
+
+                    actualizarOrientacion(
+                        estado.ultimaAlpha,
+                        estado.ultimaBeta,
+                        estado.ultimaGamma,
+                        estado.orientacion.absoluta
+                    );
+
+                    actualizarInterfaz();
+
+                    actualizarPantalla();
+                }
+            }
+        );
+
+    } else {
+
+        window.addEventListener(
+            "orientationchange",
+            () => {
+
+                if (
+                    estado.ultimaAlpha !== null &&
+                    estado.ultimaBeta !== null &&
+                    estado.ultimaGamma !== null
+                ) {
+
+                    actualizarOrientacion(
+                        estado.ultimaAlpha,
+                        estado.ultimaBeta,
+                        estado.ultimaGamma,
+                        estado.orientacion.absoluta
+                    );
+
+                    actualizarInterfaz();
+
+                    actualizarPantalla();
+                }
+            }
+        );
+    }
 }
 
 
-function manejarOrientacion(evento) {
+// ============================================================
+// ORIENTACIÓN ABSOLUTA
+// ============================================================
+
+function manejarOrientacionAbsoluta(
+    evento
+) {
 
     if (
-        estado.modo !== "ar" ||
+        estado.modo !== "ar"
+    ) {
+        return;
+    }
+
+
+    if (
+        evento.alpha === null ||
         evento.beta === null ||
         evento.gamma === null
     ) {
         return;
     }
 
-    estado.ultimaBeta =
-        evento.beta;
 
-    let nuevaDireccion;
+    ultimoEventoAbsoluto =
+        performance.now();
+
+
+    procesarEvento(
+        evento,
+        true
+    );
+}
+
+
+// ============================================================
+// ORIENTACIÓN NORMAL
+// ============================================================
+
+function manejarOrientacion(
+    evento
+) {
+
+    if (
+        estado.modo !== "ar"
+    ) {
+        return;
+    }
+
+
+    /*
+     * Si acabamos de recibir orientación absoluta,
+     * ignoramos el evento relativo para no mezclar
+     * dos sistemas de referencia diferentes.
+     */
+
+    if (
+        performance.now() -
+        ultimoEventoAbsoluto <
+        1000
+    ) {
+        return;
+    }
+
+
+    if (
+        evento.alpha === null ||
+        evento.beta === null ||
+        evento.gamma === null
+    ) {
+        return;
+    }
+
+
+    procesarEvento(
+        evento,
+        Boolean(evento.absolute)
+    );
+}
+
+
+// ============================================================
+// PROCESAR SENSOR
+// ============================================================
+
+function procesarEvento(
+    evento,
+    absoluta
+) {
+
+    let alpha =
+        Number(evento.alpha);
+
+
+    const beta =
+        Number(evento.beta);
+
+
+    const gamma =
+        Number(evento.gamma);
+
+
+    /*
+     * En Safari existe webkitCompassHeading.
+     *
+     * Es una lectura de brújula que ya expresa
+     * la dirección del teléfono respecto al norte.
+     *
+     * La convertimos al alpha utilizado por
+     * DeviceOrientation:
+     *
+     * alpha = 360 - heading
+     */
 
     if (
         typeof evento.webkitCompassHeading ===
-        "number"
+        "number" &&
+        Number.isFinite(
+            evento.webkitCompassHeading
+        )
     ) {
 
-        nuevaDireccion =
+        const heading =
             normalizar(
                 evento.webkitCompassHeading
             );
 
-    } else if (
-        evento.absolute &&
-        evento.alpha !== null
-    ) {
 
-        nuevaDireccion =
+        alpha =
             normalizar(
-                360 - evento.alpha
+                360 - heading
             );
+    }
 
-    } else {
+
+    if (
+        !actualizarOrientacion(
+            alpha,
+            beta,
+            gamma,
+            absoluta
+        )
+    ) {
         return;
     }
 
-    const referencia =
-        estado.referenciaBeta ?? 90;
 
-    const nuevaAltura =
-        limitar(
-            evento.beta -
-            referencia,
+    estado.ultimaAlpha =
+        alpha;
 
-            -89,
-            89
-        );
+    estado.ultimaBeta =
+        beta;
 
-    const vertical =
-        Math.abs(
-            nuevaAltura
-        );
-
-    let suavizado = 0.15;
-
-    if (vertical > 70) {
-        suavizado = 0.02;
-    } else if (vertical > 55) {
-        suavizado = 0.05;
-    } else if (vertical > 40) {
-        suavizado = 0.10;
-    }
-
-    estado.direccion =
-        moverSuave(
-            estado.direccion,
-            nuevaDireccion,
-            suavizado
-        );
-
-    estado.altura +=
-        (
-            nuevaAltura -
-            estado.altura
-        ) * 0.12;
-
-    estado.inclinacion +=
-        (
-            limitar(
-                evento.gamma,
-                -45,
-                45
-            ) -
-            estado.inclinacion
-        ) * 0.08;
+    estado.ultimaGamma =
+        gamma;
 
 
-    direccionTexto.textContent =
-        `${estado.direccion.toFixed(1)}°`;
+    actualizarInterfaz(
+        evento,
+        absoluta
+    );
 
-    alturaTexto.textContent =
-        `${estado.altura.toFixed(1)}°`;
-
-    debug.textContent =
-        `α:${Math.round(
-            evento.alpha || 0
-        )} ` +
-
-        `β:${Math.round(
-            evento.beta
-        )} ` +
-
-        `γ:${Math.round(
-            evento.gamma
-        )}`;
 
     actualizarPantalla();
 }
 
 
-export function calibrarSensores() {
+// ============================================================
+// INTERFAZ
+// ============================================================
 
-    if (
-        estado.ultimaBeta === null
-    ) {
-        alert(
-            "Activa los sensores primero."
-        );
+function actualizarInterfaz(
+    evento = null,
+    absoluta = estado.orientacion.absoluta
+) {
 
-        return;
-    }
+    direccionTexto.textContent =
+        `${estado.direccion.toFixed(1)}°`;
 
-    estado.referenciaBeta =
-        estado.ultimaBeta;
-
-    estado.altura = 0;
 
     alturaTexto.textContent =
-        "0°";
+        `${estado.altura.toFixed(1)}°`;
+
+
+    let texto =
+        `Dir: ${estado.direccion.toFixed(1)}° ` +
+        `Alt: ${estado.altura.toFixed(1)}°`;
+
+
+    if (
+        evento
+    ) {
+
+        texto +=
+            ` | α:${Math.round(evento.alpha ?? 0)}` +
+            ` β:${Math.round(evento.beta ?? 0)}` +
+            ` γ:${Math.round(evento.gamma ?? 0)}` +
+            ` | ${absoluta ? "ABS" : "REL"}`;
+    }
+
+
+    debug.textContent =
+        texto;
+}
+
+
+// ============================================================
+// CALIBRAR
+// ============================================================
+
+export function calibrarSensores() {
+
+    /*
+     * Ya NO utilizamos beta como horizonte.
+     *
+     * Eso era uno de los problemas del sistema anterior.
+     *
+     * Aquí simplemente reiniciamos el filtro de orientación.
+     */
+
+    reiniciarOrientacion();
+
+
+    if (
+        estado.ultimaAlpha !== null &&
+        estado.ultimaBeta !== null &&
+        estado.ultimaGamma !== null
+    ) {
+
+        actualizarOrientacion(
+            estado.ultimaAlpha,
+            estado.ultimaBeta,
+            estado.ultimaGamma,
+            estado.orientacion.absoluta
+        );
+    }
+
+
+    actualizarInterfaz();
+
 
     actualizarPantalla();
 }
