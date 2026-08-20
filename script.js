@@ -7,6 +7,7 @@ const ctx = canvas.getContext("2d");
 
 const direccionElemento = document.getElementById("direccion");
 const altitudElemento = document.getElementById("altitud");
+const debugElemento = document.getElementById("debug");
 
 let latitud;
 let longitud;
@@ -758,6 +759,18 @@ function activarSensores() {
 
             ultimaActualizacion =
                 ahora;
+
+
+            // === DEPURACIÓN TEMPORAL: valores crudos del sensor ===
+
+            if (debugElemento) {
+
+                debugElemento.textContent =
+                    `alpha: ${evento.alpha?.toFixed(1)} | ` +
+                    `beta: ${evento.beta?.toFixed(1)} | ` +
+                    `gamma: ${evento.gamma?.toFixed(1)}`;
+
+            }
 
 
             let nuevoHeading;

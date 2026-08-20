@@ -150,3 +150,18 @@ body.modo-libre #activar {
     font-size: 13px;
     line-height: 1.4;
 }
+
+#debug {
+    position: fixed;
+    top: 10px;
+    left: 10px;
+    z-index: 100;
+
+    color: #0f0;
+    background: rgba(0, 0, 0, 0.7);
+    padding: 6px 10px;
+    border-radius: 6px;
+
+    font-family: monospace;
+    font-size: 12px;
+}
