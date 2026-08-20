@@ -3,36 +3,35 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>Morph | Aprendizaje adaptado a tí.</title>
+
+    <title>Morph | Aprendizaje adaptado a ti</title>
+
     <link rel="stylesheet" href="./style.css">
+
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Elms+Sans:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Elms+Sans:ital,wght@0,100..900;1,100..900&display=swap"
+        rel="stylesheet"
+    >
 </head>
-<body>  
+
+<body>
+
     <div id="ubicacionDiv" class="ubicacionDiv">
         <h1 id="ubicacionMensaje"></h1>
         <h4 id="ubicacionUsuario"></h4>
     </div>
+
     <video id="camara" autoplay playsinline muted></video>
+
     <canvas id="cieloCamara"></canvas>
 
     <button id="activar">Activar sensores</button>
     <button id="calibrar">Calibrar horizonte</button>
     <button id="modoBoton">Modo mapa libre</button>
+
     <button id="buscarObjeto">🎯 Encontrar objeto</button>
-
-<div id="buscadorObjetos">
-    <button data-objeto="Sol">Sol</button>
-    <button data-objeto="Luna">Luna</button>
-    <button data-objeto="Mercurio">Mercurio</button>
-    <button data-objeto="Venus">Venus</button>
-    <button data-objeto="Marte">Marte</button>
-    <button data-objeto="Júpiter">Júpiter</button>
-    <button data-objeto="Saturno">Saturno</button>
-</div>
-
-<div id="objetivo"></div>
 
     <div id="orientacion">
         Dirección: <span id="direccion">-</span><br>
@@ -40,9 +39,17 @@
     </div>
 
     <div id="fovControl">
-        Zoom / FOV: <span id="fovValor">-</span><br>
-        <input type="range" id="fovSlider" min="30" max="100" step="1">
+        Zoom / FOV: <span id="fovValor">-</span>
+        <input
+            type="range"
+            id="fovSlider"
+            min="30"
+            max="100"
+            step="1"
+        >
     </div>
+
+    <div id="objetivo"></div>
 
     <div id="errorCamara"></div>
 
@@ -50,5 +57,6 @@
 
     <script src="https://cdn.jsdelivr.net/npm/astronomy-engine/astronomy.browser.min.js"></script>
     <script src="script.js"></script>
+
 </body>
 </html>

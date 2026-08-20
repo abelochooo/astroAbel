@@ -1,50 +1,49 @@
-body {
-    display: flex;
-    flex-direction: column;
-    background-color: black;
-    margin: 0;
-    width: 100%;
-    height: 100vh;
-    overflow: hidden;
+* {
+    box-sizing: border-box;
 }
 
-/* PANTALLA INICIAL */
+html,
+body {
+    margin: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #000;
+    font-family: Arial, Helvetica, sans-serif;
+}
+
+button,
+input {
+    font: inherit;
+}
+
 .ubicacionDiv {
     position: fixed;
     inset: 0;
     z-index: 10000;
 
-    background-color: beige;
-
-    width: 100%;
-    height: 100%;
-
-    color: black;
-
     display: flex;
+    flex-direction: column;
     justify-content: center;
     align-items: center;
-    flex-direction: column;
 
-    font-family: Arial, Helvetica, sans-serif;
-    font-size: 20px;
+    background: beige;
+    color: #000;
+    text-align: center;
+    padding: 20px;
 }
 
 #ubicacionMensaje {
-    color: black;
-    display: block;
+    margin: 0 0 15px;
     min-height: 30px;
 }
 
 #ubicacionUsuario {
-    color: black;
-    font-family: Arial, Helvetica, sans-serif;
-    font-weight: 100;
+    margin: 0;
     font-size: 20px;
-    margin-top: -20px;
+    font-weight: 300;
 }
 
-/* MODO AR: vídeo de la cámara real, siempre detrás de todo */
 #camara {
     position: fixed;
     inset: 0;
@@ -52,11 +51,10 @@ body {
 
     width: 100%;
     height: 100%;
+
     object-fit: cover;
 }
 
-/* Canvas donde se dibujan estrellas y constelaciones,
-   SIEMPRE con fondo transparente para que se vea la cámara debajo */
 #cieloCamara {
     position: fixed;
     inset: 0;
@@ -69,10 +67,149 @@ body {
     touch-action: none;
 }
 
+button {
+    border: 0;
+    border-radius: 10px;
+    padding: 11px 16px;
+    cursor: pointer;
+}
 
-/* =====================================================
-   MODO LIBRE (sin cámara, arrastras para mirar alrededor)
-   ===================================================== */
+#activar {
+    position: fixed;
+    right: 15px;
+    bottom: 200px;
+    z-index: 100;
+
+    background: rgba(255, 255, 255, 0.9);
+    color: #000;
+}
+
+#calibrar {
+    position: fixed;
+    right: 15px;
+    bottom: 150px;
+    z-index: 100;
+
+    background: rgba(120, 200, 255, 0.9);
+    color: #000;
+}
+
+#modoBoton {
+    position: fixed;
+    right: 15px;
+    bottom: 100px;
+    z-index: 100;
+
+    background: rgba(255, 255, 255, 0.9);
+    color: #000;
+}
+
+#buscarObjeto {
+    position: fixed;
+    left: 50%;
+    bottom: 25px;
+    z-index: 99999;
+
+    transform: translateX(-50%);
+
+    padding: 13px 20px;
+
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 25px;
+
+    background: rgba(8, 12, 25, 0.92);
+    color: white;
+
+    font-size: 16px;
+    font-weight: 600;
+
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+}
+
+#buscarObjeto:active {
+    transform: translateX(-50%) scale(0.95);
+}
+
+#orientacion {
+    position: fixed;
+    right: 20px;
+    bottom: 20px;
+    z-index: 100;
+
+    padding: 8px 12px;
+
+    border-radius: 10px;
+
+    background: rgba(0, 0, 0, 0.55);
+    color: white;
+
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+#fovControl {
+    position: fixed;
+    top: 60px;
+    left: 10px;
+    z-index: 100;
+
+    width: 160px;
+    padding: 8px 12px;
+
+    border-radius: 8px;
+
+    background: rgba(0, 0, 0, 0.55);
+    color: white;
+
+    font-size: 12px;
+}
+
+#fovControl input {
+    width: 100%;
+    margin-top: 5px;
+}
+
+#errorCamara {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    z-index: 500;
+
+    display: none;
+
+    max-width: 85%;
+    padding: 16px 20px;
+
+    transform: translate(-50%, -50%);
+
+    border-radius: 10px;
+
+    background: rgba(180, 0, 0, 0.9);
+    color: white;
+
+    text-align: center;
+    line-height: 1.5;
+}
+
+#debug {
+    position: fixed;
+    top: 10px;
+    left: 10px;
+    z-index: 100;
+
+    padding: 6px 10px;
+
+    border-radius: 6px;
+
+    background: rgba(0, 0, 0, 0.7);
+    color: #00ff00;
+
+    font-family: monospace;
+    font-size: 12px;
+}
 
 body.modo-libre {
     background: radial-gradient(
@@ -97,176 +234,4 @@ body.modo-libre #cieloCamara:active {
 
 body.modo-libre #activar {
     display: none;
-}
-
-#activar {
-    position: fixed;
-    bottom: 200px;
-    right: 15px;
-    z-index: 100;
-
-    padding: 10px 16px;
-    border: none;
-    border-radius: 8px;
-
-    background: rgba(255, 255, 255, 0.9);
-    color: black;
-    font-family: Arial, Helvetica, sans-serif;
-    font-size: 14px;
-
-    cursor: pointer;
-}
-
-#calibrar {
-    position: fixed;
-    bottom: 150px;
-    right: 15px;
-    z-index: 100;
-
-    padding: 10px 16px;
-    border: none;
-    border-radius: 8px;
-
-    background: rgba(120, 200, 255, 0.9);
-    color: black;
-    font-family: Arial, Helvetica, sans-serif;
-    font-size: 14px;
-
-    cursor: pointer;
-}
-
-#modoBoton {
-    position: fixed;
-    bottom: 100px;
-    right: 15px;
-    z-index: 100;
-
-    padding: 10px 16px;
-    border: none;
-    border-radius: 8px;
-
-    background: rgba(255, 255, 255, 0.9);
-    color: black;
-    font-family: Arial, Helvetica, sans-serif;
-    font-size: 14px;
-
-    cursor: pointer;
-}
-
-#orientacion {
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    z-index: 100;
-
-    color: white;
-    background: rgba(0, 0, 0, 0.55);
-    padding: 8px 12px;
-    border-radius: 10px;
-
-    font-family: Arial, Helvetica, sans-serif;
-    font-size: 13px;
-    line-height: 1.4;
-}
-
-#debug {
-    position: fixed;
-    top: 10px;
-    left: 10px;
-    z-index: 100;
-
-    color: #0f0;
-    background: rgba(0, 0, 0, 0.7);
-    padding: 6px 10px;
-    border-radius: 6px;
-
-    font-family: monospace;
-    font-size: 12px;
-}
-
-#errorCamara {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    z-index: 500;
-
-    display: none;
-
-    max-width: 85%;
-
-    color: white;
-    background: rgba(180, 0, 0, 0.9);
-    padding: 16px 20px;
-    border-radius: 10px;
-
-    font-family: Arial, Helvetica, sans-serif;
-    font-size: 14px;
-    line-height: 1.5;
-    text-align: center;
-}
-
-#fovControl {
-    position: fixed;
-    top: 60px;
-    left: 10px;
-    z-index: 100;
-
-    color: white;
-    background: rgba(0, 0, 0, 0.55);
-    padding: 8px 12px;
-    border-radius: 8px;
-
-    font-family: Arial, Helvetica, sans-serif;
-    font-size: 12px;
-
-    width: 160px;
-}
-
-#fovControl input {
-    width: 100%;
-}
-
-#buscarObjeto{
-    position:fixed;
-    left:50%;
-    bottom:25px;
-    transform:translateX(-50%);
-    z-index:99999;
-    padding:13px 20px;
-    border:1px solid rgba(255,255,255,.25);
-    border-radius:25px;
-    background:rgba(8,12,25,.92);
-    color:#fff;
-    font-size:16px;
-    font-weight:600;
-    box-shadow:0 4px 20px rgba(0,0,0,.5);
-    -webkit-backdrop-filter:blur(10px);
-    backdrop-filter:blur(10px);
-}
-
-#buscarObjeto:active{
-    transform:translateX(-50%) scale(.95);
-}
-#objetivo{
-    display:none;
-    position:fixed;
-    left:50%;
-    top:50%;
-    transform:translate(-50%,-50%);
-    z-index:15;
-    color:white;
-    text-align:center;
-    font:700 20px Arial;
-    pointer-events:none;
-}
-
-.flechaObjetivo{
-    font-size:70px;
-    color:#58a6ff;
-    text-shadow:0 0 15px #58a6ff;
-}
-
-.encontrado{
-    color:#6cff8b;
 }

@@ -1,654 +1,550 @@
-const $=id=>document.getElementById(id);
+const canvas = document.getElementById("cieloCamara");
+const ctx = canvas.getContext("2d");
 
-const canvas=$("cieloCamara");
-const ctx=canvas.getContext("2d");
+const mensaje = document.getElementById("ubicacionMensaje");
+const ubicacion = document.getElementById("ubicacionUsuario");
+const pantallaInicio = document.getElementById("ubicacionDiv");
+const direccionTexto = document.getElementById("direccion");
+const alturaTexto = document.getElementById("altitud");
+const debug = document.getElementById("debug");
+const camara = document.getElementById("camara");
+const errorCamara = document.getElementById("errorCamara");
 
-const UI={
-mensaje:$("ubicacionMensaje"),
-ubicacion:$("ubicacionUsuario"),
-pantalla:$("ubicacionDiv"),
-direccion:$("direccion"),
-altitud:$("altitud"),
-debug:$("debug"),
-camara:$("camara"),
-error:$("errorCamara"),
-activar:$("activar"),
-calibrar:$("calibrar"),
-modo:$("modoBoton"),
-fov:$("fovSlider"),
-fovTexto:$("fovValor"),
-buscar:$("buscarObjeto")
-};
+const botonSensores = document.getElementById("activar");
+const botonCalibrar = document.getElementById("calibrar");
+const botonModo = document.getElementById("modoBoton");
+const botonBuscar = document.getElementById("buscarObjeto");
 
-let lat;
-let lon;
-let estrellas=[];
-let constelaciones=[];
-let cuerpos=[];
+const sliderFov = document.getElementById("fovSlider");
+const textoFov = document.getElementById("fovValor");
 
-let modo="ar";
-let heading=0;
-let pitch=0;
-let roll=0;
+let latitud;
+let longitud;
 
-let ultimoBeta=null;
-let betaReferencia=null;
-let sensoresActivados=false;
+let estrellas = [];
+let constelaciones = [];
+let planetas = [];
 
-let fovH=Number(localStorage.getItem("fovH"))||66;
-let fovV=50;
+let modo = "ar";
 
-let renderPendiente=false;
-let arrastrando=false;
+let direccion = 0;
+let altura = 0;
+let inclinacion = 0;
 
-let inicioX=0;
-let inicioY=0;
-let inicioHeading=0;
-let inicioPitch=0;
+let ultimaBeta = null;
+let referenciaBeta = null;
 
-let objetivo=null;
+let sensoresEncendidos = false;
 
-const rad=x=>x*Math.PI/180;
-const deg=x=>x*180/Math.PI;
+let campoVision = Number(localStorage.getItem("fovH")) || 66;
+let campoVisionVertical = 50;
 
-const normalizar=x=>((x%360)+360)%360;
+let moviendo = false;
+let inicioX = 0;
+let inicioY = 0;
+let inicioDireccion = 0;
+let inicioAltura = 0;
 
-const limitar=(x,min,max)=>
-    Math.max(min,Math.min(max,x));
+let objetoBuscado = null;
 
-const diferenciaAngular=(a,b)=>
-    ((a-b+540)%360)-180;
+const aRadianes = numero => numero * Math.PI / 180;
+const aGrados = numero => numero * 180 / Math.PI;
 
-const suavizarAngulo=(actual,nuevo,factor)=>
-    normalizar(
-        actual+
-        diferenciaAngular(nuevo,actual)*factor
+function normalizar(numero) {
+    return ((numero % 360) + 360) % 360;
+}
+
+function limitar(numero, minimo, maximo) {
+    return Math.max(minimo, Math.min(maximo, numero));
+}
+
+function diferenciaAngulo(a, b) {
+    return ((a - b + 540) % 360) - 180;
+}
+
+function moverSuave(actual, nuevo, velocidad) {
+    return normalizar(
+        actual + diferenciaAngulo(nuevo, actual) * velocidad
     );
+}
 
-function render(){
-
-    if(renderPendiente)return;
-
-    renderPendiente=true;
-
-    requestAnimationFrame(()=>{
-
-        renderPendiente=false;
-
+function actualizarPantalla() {
+    requestAnimationFrame(() => {
         dibujarCielo();
-
     });
 }
 
-async function cargar(archivo){
+async function cargarArchivo(nombre) {
+    const respuesta = await fetch(nombre);
 
-    const respuesta=await fetch(archivo);
-
-    if(!respuesta.ok){
-        throw new Error(
-            `No se pudo cargar ${archivo}`
-        );
+    if (!respuesta.ok) {
+        throw new Error("No se pudo cargar " + nombre);
     }
 
     return await respuesta.json();
 }
 
-async function obtenerCiudad(lat,lon){
-
-    try{
-
-        const url=
+async function buscarCiudad(lat, lon) {
+    try {
+        const url =
             `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`;
 
-        const respuesta=await fetch(url);
+        const respuesta = await fetch(url);
 
-        if(!respuesta.ok){
-            throw new Error("Nominatim");
+        if (!respuesta.ok) {
+            throw new Error("No se encontró la ciudad");
         }
 
-        const datos=await respuesta.json();
+        const datos = await respuesta.json();
+        const direccion = datos.address || {};
 
-        const a=datos.address||{};
-
-        const ciudad=
-            a.city||
-            a.town||
-            a.village||
-            a.municipality||
-            a.county||
+        const ciudad =
+            direccion.city ||
+            direccion.town ||
+            direccion.village ||
+            direccion.municipality ||
+            direccion.county ||
             "Ubicación desconocida";
 
-        return `${ciudad}, ${a.country||""}`;
+        return `${ciudad}, ${direccion.country || ""}`;
 
-    }catch(error){
-
+    } catch (error) {
         console.error(error);
-
         return "Ubicación obtenida";
     }
 }
 
-function obtenerUbicacion(){
-
-    if(!navigator.geolocation){
-
-        UI.ubicacion.textContent=
-            "Geolocalización no disponible.";
-
+function conseguirUbicacion() {
+    if (!navigator.geolocation) {
+        ubicacion.textContent = "La ubicación no está disponible.";
         return;
     }
 
     navigator.geolocation.getCurrentPosition(
+        async posicion => {
 
-        async ({coords})=>{
+            latitud = posicion.coords.latitude;
+            longitud = posicion.coords.longitude;
 
-            lat=coords.latitude;
-            lon=coords.longitude;
+            ubicacion.textContent =
+                await buscarCiudad(latitud, longitud);
 
-            UI.ubicacion.textContent=
-                await obtenerCiudad(lat,lon);
+            try {
+                const datos = await Promise.all([
+                    cargarArchivo("estrellas.json"),
+                    cargarArchivo("constelaciones.json")
+                ]);
 
-            try{
+                estrellas = datos[0];
+                constelaciones = datos[1];
 
-                const resultados=
-                    await Promise.all([
-
-                        cargar("estrellas.json"),
-                        cargar("constelaciones.json")
-
-                    ]);
-
-                estrellas=resultados[0];
-                constelaciones=resultados[1];
-
-            }catch(error){
-
-                console.error(
-                    "Error cargando JSON:",
-                    error
-                );
+            } catch (error) {
+                console.error("Error cargando los archivos:", error);
             }
 
-            actualizarPlanetas();
+            calcularPlanetas();
 
-            setInterval(
-                actualizarPlanetas,
-                30000
-            );
+            setInterval(calcularPlanetas, 30000);
 
-            render();
+            actualizarPantalla();
 
-            setTimeout(()=>{
-
-                UI.pantalla?.remove();
-
-            },2500);
+            setTimeout(() => {
+                pantallaInicio?.remove();
+            }, 2500);
 
         },
 
-        error=>{
+        error => {
 
-            UI.mensaje.textContent=
-                "No se pudo obtener tu ubicación";
+            mensaje.textContent = "No se pudo obtener tu ubicación";
 
-            UI.ubicacion.textContent=
+            ubicacion.textContent =
                 `Error ${error.code}: ${error.message}`;
 
-            setTimeout(()=>{
-
-                UI.pantalla?.remove();
-
-            },2500);
-
+            setTimeout(() => {
+                pantallaInicio?.remove();
+            }, 2500);
         },
 
         {
-            enableHighAccuracy:true,
-            timeout:10000,
-            maximumAge:0
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 0
         }
     );
 }
 
-function raGrados(ra){
+function convertirRA(ra) {
+    if (typeof ra !== "string") return null;
 
-    if(typeof ra!=="string"){
-        return null;
-    }
-
-    const p=ra.match(
+    const partes = ra.match(
         /(\d+)h\s*(\d+)m\s*([\d.]+)s/i
     );
 
-    if(!p){
-        return null;
-    }
+    if (!partes) return null;
 
-    return(
-        Number(p[1])+
-        Number(p[2])/60+
-        Number(p[3])/3600
-    )*15;
+    return (
+        Number(partes[1]) +
+        Number(partes[2]) / 60 +
+        Number(partes[3]) / 3600
+    ) * 15;
 }
 
-function decGrados(dec){
+function convertirDec(dec) {
+    if (typeof dec !== "string") return null;
 
-    if(typeof dec!=="string"){
-        return null;
-    }
-
-    const p=dec.match(
+    const partes = dec.match(
         /([+-])\s*(\d+)[°º]\s*(\d+)[′']\s*(\d+(?:\.\d+)?)[″"]/u
     );
 
-    if(!p){
-        return null;
-    }
+    if (!partes) return null;
 
-    const signo=
-        p[1]==="-"?-1:1;
+    const signo = partes[1] === "-" ? -1 : 1;
 
-    return signo*(
-        Number(p[2])+
-        Number(p[3])/60+
-        Number(p[4])/3600
+    return signo * (
+        Number(partes[2]) +
+        Number(partes[3]) / 60 +
+        Number(partes[4]) / 3600
     );
 }
 
-function tiempoSideral(){
+function tiempoSideral() {
+    const fechaJuliana =
+        Date.now() / 86400000 + 2440587.5;
 
-    const jd=
-        Date.now()/86400000+
-        2440587.5;
+    const siglos =
+        (fechaJuliana - 2451545) / 36525;
 
-    const T=
-        (jd-2451545)/36525;
+    const hora =
+        280.46061837 +
+        360.98564736629 *
+        (fechaJuliana - 2451545) +
+        0.000387933 * siglos * siglos -
+        siglos * siglos * siglos / 38710000;
 
-    const gmst=
-        280.46061837+
-        360.98564736629*
-        (jd-2451545)+
-        0.000387933*T*T-
-        T*T*T/38710000;
-
-    return normalizar(gmst+lon);
+    return normalizar(hora + longitud);
 }
 
-function altAz(ra,dec,lst){
+function calcularAltura(ra, dec, horaSideral) {
+    let hora = normalizar(horaSideral - ra);
 
-    let H=
-        normalizar(lst-ra);
-
-    if(H>180){
-        H-=360;
+    if (hora > 180) {
+        hora -= 360;
     }
 
-    const L=rad(lat);
-    const D=rad(dec);
-    const h=rad(H);
+    const lat = aRadianes(latitud);
+    const declinacion = aRadianes(dec);
+    const h = aRadianes(hora);
 
-    const alt=Math.asin(
+    const altura = Math.asin(
         limitar(
-            Math.sin(L)*Math.sin(D)+
-            Math.cos(L)*
-            Math.cos(D)*
+            Math.sin(lat) * Math.sin(declinacion) +
+            Math.cos(lat) *
+            Math.cos(declinacion) *
             Math.cos(h),
             -1,
             1
         )
     );
 
-    const az=Math.atan2(
-
+    const azimut = Math.atan2(
         Math.sin(h),
-
-        Math.cos(h)*Math.sin(L)-
-        Math.tan(D)*Math.cos(L)
-
+        Math.cos(h) * Math.sin(lat) -
+        Math.tan(declinacion) * Math.cos(lat)
     );
 
-    return{
-
-        az:normalizar(deg(az)+180),
-        alt:deg(alt)
-
+    return {
+        azimut: normalizar(aGrados(azimut) + 180),
+        altura: aGrados(altura)
     };
 }
 
-function vector(az,alt){
+function crearVector(azimut, altura) {
+    const az = aRadianes(azimut);
+    const alt = aRadianes(altura);
 
-    az=rad(az);
-    alt=rad(alt);
-
-    return{
-
-        x:Math.cos(alt)*Math.sin(az),
-        y:Math.cos(alt)*Math.cos(az),
-        z:Math.sin(alt)
-
+    return {
+        x: Math.cos(alt) * Math.sin(az),
+        y: Math.cos(alt) * Math.cos(az),
+        z: Math.sin(alt)
     };
 }
 
-function dot(a,b){
-
-    return(
-        a.x*b.x+
-        a.y*b.y+
-        a.z*b.z
+function productoPunto(a, b) {
+    return (
+        a.x * b.x +
+        a.y * b.y +
+        a.z * b.z
     );
 }
 
-function cross(a,b){
-
-    return{
-
-        x:a.y*b.z-a.z*b.y,
-        y:a.z*b.x-a.x*b.z,
-        z:a.x*b.y-a.y*b.x
-
+function productoCruz(a, b) {
+    return {
+        x: a.y * b.z - a.z * b.y,
+        y: a.z * b.x - a.x * b.z,
+        z: a.x * b.y - a.y * b.x
     };
 }
 
-function unit(v){
-
-    const n=
+function normalizarVector(vector) {
+    const tamaño =
         Math.hypot(
-            v.x,
-            v.y,
-            v.z
-        )||1;
+            vector.x,
+            vector.y,
+            vector.z
+        ) || 1;
 
-    return{
-
-        x:v.x/n,
-        y:v.y/n,
-        z:v.z/n
-
+    return {
+        x: vector.x / tamaño,
+        y: vector.y / tamaño,
+        z: vector.z / tamaño
     };
 }
 
-function baseCamara(){
+function crearCamara() {
+    const haciaDondeMiro =
+        crearVector(direccion, altura);
 
-    const forward=
-        vector(
-            heading,
-            pitch
-        );
+    let derecha = normalizarVector(
+        productoCruz(
+            haciaDondeMiro,
+            {
+                x: 0,
+                y: 0,
+                z: 1
+            }
+        )
+    );
 
-    let right=
-        unit(
-            cross(
-                forward,
+    if (
+        Math.hypot(derecha.x, derecha.y) < 0.001
+    ) {
+        derecha = normalizarVector(
+            productoCruz(
+                haciaDondeMiro,
                 {
-                    x:0,
-                    y:0,
-                    z:1
+                    x: 1,
+                    y: 0,
+                    z: 0
                 }
             )
         );
-
-    if(
-        Math.hypot(
-            right.x,
-            right.y
-        )<0.001
-    ){
-
-        right=
-            unit(
-                cross(
-                    forward,
-                    {
-                        x:1,
-                        y:0,
-                        z:0
-                    }
-                )
-            );
     }
 
-    const up=
-        unit(
-            cross(
-                right,
-                forward
-            )
-        );
+    const arriba = normalizarVector(
+        productoCruz(
+            derecha,
+            haciaDondeMiro
+        )
+    );
 
-    return{
-        forward,
-        right,
-        up
+    return {
+        haciaDondeMiro,
+        derecha,
+        arriba
     };
 }
 
-function proyectar(
-    az,
-    alt,
-    base,
+function ponerEnPantalla(
+    azimut,
+    alturaObjeto,
+    camaraActual,
     fx,
     fy,
-    cx,
-    cy
-){
+    centroX,
+    centroY
+) {
+    const objeto = crearVector(
+        azimut,
+        alturaObjeto
+    );
 
-    const p=
-        vector(
-            az,
-            alt
+    const delante =
+        productoPunto(
+            objeto,
+            camaraActual.haciaDondeMiro
         );
 
-    const frente=
-        dot(
-            p,
-            base.forward
-        );
-
-    if(frente<=0.001){
+    if (delante <= 0.001) {
         return null;
     }
 
-    const x=
-        cx+
-        fx*
-        dot(p,base.right)/
-        frente;
+    const x =
+        centroX +
+        fx *
+        productoPunto(
+            objeto,
+            camaraActual.derecha
+        ) / delante;
 
-    const y=
-        cy-
-        fy*
-        dot(p,base.up)/
-        frente;
+    const y =
+        centroY -
+        fy *
+        productoPunto(
+            objeto,
+            camaraActual.arriba
+        ) / delante;
 
-    const margen=150;
+    const margen = 150;
 
-    if(
-        x<-margen||
-        x>innerWidth+margen||
-        y<-margen||
-        y>innerHeight+margen
-    ){
-
+    if (
+        x < -margen ||
+        x > innerWidth + margen ||
+        y < -margen ||
+        y > innerHeight + margen
+    ) {
         return null;
     }
 
-    return{x,y};
+    return { x, y };
 }
 
-const planetas=[
-
-    ["Sun","Sol"],
-    ["Moon","Luna"],
-    ["Mercury","Mercurio"],
-    ["Venus","Venus"],
-    ["Mars","Marte"],
-    ["Jupiter","Júpiter"],
-    ["Saturn","Saturno"]
-
+const listaPlanetas = [
+    ["Sun", "Sol"],
+    ["Moon", "Luna"],
+    ["Mercury", "Mercurio"],
+    ["Venus", "Venus"],
+    ["Mars", "Marte"],
+    ["Jupiter", "Júpiter"],
+    ["Saturn", "Saturno"]
 ];
 
-function actualizarPlanetas(){
-
-    if(
-        lat===undefined||
-        lon===undefined||
-        typeof Astronomy==="undefined"
-    ){
-
+function calcularPlanetas() {
+    if (
+        latitud === undefined ||
+        longitud === undefined ||
+        typeof Astronomy === "undefined"
+    ) {
         return;
     }
 
-    const ahora=new Date();
+    const ahora = new Date();
 
-    const observador=
+    const observador =
         new Astronomy.Observer(
-            lat,
-            lon,
+            latitud,
+            longitud,
             0
         );
 
-    cuerpos=
-        planetas
-        .map(([body,nombre])=>{
+    planetas = listaPlanetas
+        .map(([nombreIngles, nombre]) => {
 
-            try{
-
-                const e=
+            try {
+                const posicion =
                     Astronomy.Equator(
-                        Astronomy.Body[body],
+                        Astronomy.Body[nombreIngles],
                         ahora,
                         observador,
                         true,
                         true
                     );
 
-                const h=
+                const cielo =
                     Astronomy.Horizon(
                         ahora,
                         observador,
-                        e.ra,
-                        e.dec,
+                        posicion.ra,
+                        posicion.dec,
                         "normal"
                     );
 
-                return{
-
+                return {
                     nombre,
-                    az:normalizar(h.azimuth),
-                    alt:h.altitude
-
+                    azimut: normalizar(cielo.azimuth),
+                    altura: cielo.altitude
                 };
 
-            }catch(error){
-
+            } catch (error) {
                 console.error(error);
-
                 return null;
             }
-
         })
         .filter(Boolean);
 
-    if(objetivo){
-
-        const nuevo=
-            cuerpos.find(
-                c=>
-                    c.nombre===
-                    objetivo.nombre
+    if (objetoBuscado) {
+        const nuevoObjeto =
+            planetas.find(
+                planeta =>
+                    planeta.nombre === objetoBuscado.nombre
             );
 
-        if(nuevo){
-            objetivo=nuevo;
+        if (nuevoObjeto) {
+            objetoBuscado = nuevoObjeto;
         }
     }
 
-    render();
+    actualizarPantalla();
 }
 
 function dibujarEstrellas(
-    lst,
-    base,
+    horaSideral,
+    camaraActual,
     fx,
     fy,
-    cx,
-    cy
-){
+    centroX,
+    centroY
+) {
+    for (const estrella of estrellas) {
 
-    for(const estrella of estrellas){
+        const ra = convertirRA(estrella.RA);
+        const dec = convertirDec(estrella.Dec);
 
-        const ra=
-            raGrados(
-                estrella.RA
-            );
-
-        const dec=
-            decGrados(
-                estrella.Dec
-            );
-
-        if(
-            ra===null||
-            dec===null
-        ){
-
+        if (ra === null || dec === null) {
             continue;
         }
 
-        const h=
-            altAz(
+        const posicion =
+            calcularAltura(
                 ra,
                 dec,
-                lst
+                horaSideral
             );
 
-        const p=
-            proyectar(
-                h.az,
-                h.alt,
-                base,
+        const punto =
+            ponerEnPantalla(
+                posicion.azimut,
+                posicion.altura,
+                camaraActual,
                 fx,
                 fy,
-                cx,
-                cy
+                centroX,
+                centroY
             );
 
-        if(!p){
+        if (!punto) continue;
+
+        const magnitud = Number(estrella.V);
+
+        if (!Number.isFinite(magnitud)) {
             continue;
         }
 
-        const mag=
-            Number(estrella.V);
-
-        if(!Number.isFinite(mag)){
-            continue;
-        }
-
-        const radio=
+        const tamaño =
             limitar(
-                3.8-mag*.45,
-                .5,
+                3.8 - magnitud * 0.45,
+                0.5,
                 5
             );
 
-        const brillo=
+        const brillo =
             limitar(
-                1.2-mag/8,
-                .15,
+                1.2 - magnitud / 8,
+                0.15,
                 1
             );
 
         ctx.beginPath();
 
         ctx.arc(
-            p.x,
-            p.y,
-            radio,
+            punto.x,
+            punto.y,
+            tamaño,
             0,
-            Math.PI*2
+            Math.PI * 2
         );
 
-        ctx.fillStyle=
+        ctx.fillStyle =
             `rgba(255,255,255,${brillo})`;
 
         ctx.fill();
@@ -656,825 +552,756 @@ function dibujarEstrellas(
 }
 
 function dibujarConstelaciones(
-    lst,
-    base,
+    horaSideral,
+    camaraActual,
     fx,
     fy,
-    cx,
-    cy
-){
+    centroX,
+    centroY
+) {
+    ctx.strokeStyle = "rgba(120,170,255,.55)";
+    ctx.lineWidth = 1;
+    ctx.font = "13px Arial";
+    ctx.fillStyle = "rgba(180,210,255,.75)";
 
-    ctx.strokeStyle=
-        "rgba(120,170,255,.55)";
+    for (const constelacion of constelaciones) {
 
-    ctx.lineWidth=1;
+        let nombrePunto = null;
 
-    ctx.font="13px Arial";
-
-    ctx.fillStyle=
-        "rgba(180,210,255,.75)";
-
-    for(const c of constelaciones){
-
-        let nombrePunto=null;
-
-        for(
-            const linea of c.lineas||[]
-        ){
-
+        for (
+            const linea of constelacion.lineas || []
+        ) {
             ctx.beginPath();
 
-            let dibujado=false;
+            let dibujado = false;
 
-            for(
-                let i=0;
-                i<linea.length-1;
+            for (
+                let i = 0;
+                i < linea.length - 1;
                 i++
-            ){
+            ) {
+                const punto1 = linea[i];
+                const punto2 = linea[i + 1];
 
-                const p1=linea[i];
-                const p2=linea[i+1];
-
-                const h1=
-                    altAz(
-                        p1[0],
-                        p1[1],
-                        lst
+                const cielo1 =
+                    calcularAltura(
+                        punto1[0],
+                        punto1[1],
+                        horaSideral
                     );
 
-                const h2=
-                    altAz(
-                        p2[0],
-                        p2[1],
-                        lst
+                const cielo2 =
+                    calcularAltura(
+                        punto2[0],
+                        punto2[1],
+                        horaSideral
                     );
 
-                const a=
-                    proyectar(
-                        h1.az,
-                        h1.alt,
-                        base,
+                const pantalla1 =
+                    ponerEnPantalla(
+                        cielo1.azimut,
+                        cielo1.altura,
+                        camaraActual,
                         fx,
                         fy,
-                        cx,
-                        cy
+                        centroX,
+                        centroY
                     );
 
-                const b=
-                    proyectar(
-                        h2.az,
-                        h2.alt,
-                        base,
+                const pantalla2 =
+                    ponerEnPantalla(
+                        cielo2.azimut,
+                        cielo2.altura,
+                        camaraActual,
                         fx,
                         fy,
-                        cx,
-                        cy
+                        centroX,
+                        centroY
                     );
 
-                if(!a||!b){
+                if (!pantalla1 || !pantalla2) {
                     continue;
                 }
 
                 ctx.moveTo(
-                    a.x,
-                    a.y
+                    pantalla1.x,
+                    pantalla1.y
                 );
 
                 ctx.lineTo(
-                    b.x,
-                    b.y
+                    pantalla2.x,
+                    pantalla2.y
                 );
 
-                if(!nombrePunto){
-                    nombrePunto=a;
+                if (!nombrePunto) {
+                    nombrePunto = pantalla1;
                 }
 
-                dibujado=true;
+                dibujado = true;
             }
 
-            if(dibujado){
+            if (dibujado) {
                 ctx.stroke();
             }
         }
 
-        if(nombrePunto){
-
+        if (nombrePunto) {
             ctx.fillText(
-                c.nombre||"",
-                nombrePunto.x+6,
-                nombrePunto.y-6
+                constelacion.nombre || "",
+                nombrePunto.x + 6,
+                nombrePunto.y - 6
             );
         }
     }
 }
 
-function dibujarCuerpos(
-    base,
+function dibujarPlanetas(
+    camaraActual,
     fx,
     fy,
-    cx,
-    cy
-){
-
-    const tamaños={
-
-        Sol:16,
-        Luna:13,
-        Júpiter:8,
-        Saturno:7,
-        Venus:6,
-        Marte:5,
-        Mercurio:4
-
+    centroX,
+    centroY
+) {
+    const tamaños = {
+        Sol: 16,
+        Luna: 13,
+        Júpiter: 8,
+        Saturno: 7,
+        Venus: 6,
+        Marte: 5,
+        Mercurio: 4
     };
 
-    const colores={
-
-        Sol:"#fff0a0",
-        Luna:"#e8e8e0",
-        Júpiter:"#e8c28c",
-        Saturno:"#ead6a0",
-        Venus:"#fff0b0",
-        Marte:"#e77d52",
-        Mercurio:"#bdb7a8"
-
+    const colores = {
+        Sol: "#fff0a0",
+        Luna: "#e8e8e0",
+        Júpiter: "#e8c28c",
+        Saturno: "#ead6a0",
+        Venus: "#fff0b0",
+        Marte: "#e77d52",
+        Mercurio: "#bdb7a8"
     };
 
-    ctx.textAlign="center";
+    ctx.textAlign = "center";
+    ctx.font = "13px Arial";
 
-    ctx.font="13px Arial";
+    for (const planeta of planetas) {
 
-    for(const cuerpo of cuerpos){
-
-        const p=
-            proyectar(
-                cuerpo.az,
-                cuerpo.alt,
-                base,
+        const punto =
+            ponerEnPantalla(
+                planeta.azimut,
+                planeta.altura,
+                camaraActual,
                 fx,
                 fy,
-                cx,
-                cy
+                centroX,
+                centroY
             );
 
-        if(!p){
-            continue;
-        }
+        if (!punto) continue;
 
-        const radio=
-            tamaños[cuerpo.nombre]||5;
+        const tamaño =
+            tamaños[planeta.nombre] || 5;
 
         ctx.beginPath();
 
         ctx.arc(
-            p.x,
-            p.y,
-            radio,
+            punto.x,
+            punto.y,
+            tamaño,
             0,
-            Math.PI*2
+            Math.PI * 2
         );
 
-        ctx.fillStyle=
-            colores[cuerpo.nombre]||
-            "#ffd27f";
+        ctx.fillStyle =
+            colores[planeta.nombre] || "#ffd27f";
 
         ctx.fill();
 
-        ctx.fillStyle=
+        ctx.fillStyle =
             "rgba(255,255,255,.9)";
 
         ctx.fillText(
-            cuerpo.nombre,
-            p.x,
-            p.y-radio-6
+            planeta.nombre,
+            punto.x,
+            punto.y - tamaño - 6
         );
     }
 
-    ctx.textAlign="left";
+    ctx.textAlign = "left";
 }
 
 function dibujarObjetivo(
-    base,
+    camaraActual,
     fx,
     fy,
-    cx,
-    cy
-){
-
-    if(!objetivo){
+    centroX,
+    centroY
+) {
+    if (!objetoBuscado) {
         return;
     }
 
-    const p=
-        proyectar(
-            objetivo.az,
-            objetivo.alt,
-            base,
+    const punto =
+        ponerEnPantalla(
+            objetoBuscado.azimut,
+            objetoBuscado.altura,
+            camaraActual,
             fx,
             fy,
-            cx,
-            cy
+            centroX,
+            centroY
         );
 
-    ctx.textAlign="center";
+    ctx.textAlign = "center";
 
-    if(p){
+    if (punto) {
 
         ctx.beginPath();
 
         ctx.arc(
-            p.x,
-            p.y,
+            punto.x,
+            punto.y,
             25,
             0,
-            Math.PI*2
+            Math.PI * 2
         );
 
-        ctx.strokeStyle=
-            "#00ff88";
-
-        ctx.lineWidth=3;
-
+        ctx.strokeStyle = "#00ff88";
+        ctx.lineWidth = 3;
         ctx.stroke();
 
-        ctx.fillStyle=
-            "#00ff88";
-
-        ctx.font=
-            "bold 15px Arial";
+        ctx.fillStyle = "#00ff88";
+        ctx.font = "bold 15px Arial";
 
         ctx.fillText(
-            `🎯 ${objetivo.nombre}`,
-            p.x,
-            p.y-34
+            `🎯 ${objetoBuscado.nombre}`,
+            punto.x,
+            punto.y - 34
         );
 
-    }else{
+    } else {
 
-        const da=
-            diferenciaAngular(
-                objetivo.az,
-                heading
+        const diferenciaHorizontal =
+            diferenciaAngulo(
+                objetoBuscado.azimut,
+                direccion
             );
 
-        const dp=
-            objetivo.alt-pitch;
+        const diferenciaVertical =
+            objetoBuscado.altura - altura;
 
-        ctx.fillStyle=
-            "#00ff88";
-
-        ctx.font=
-            "bold 18px Arial";
+        ctx.fillStyle = "#00ff88";
+        ctx.font = "bold 18px Arial";
 
         ctx.fillText(
-
-            `${Math.abs(Math.round(da))}° ${da>0?"→":"←"}   ${Math.abs(Math.round(dp))}° ${dp>0?"↑":"↓"}`,
-
-            innerWidth/2,
-            innerHeight-80
-
+            `${Math.abs(Math.round(diferenciaHorizontal))}° ` +
+            `${diferenciaHorizontal > 0 ? "→" : "←"}   ` +
+            `${Math.abs(Math.round(diferenciaVertical))}° ` +
+            `${diferenciaVertical > 0 ? "↑" : "↓"}`,
+            innerWidth / 2,
+            innerHeight - 80
         );
     }
 
-    ctx.textAlign="left";
+    ctx.textAlign = "left";
 }
 
-function dibujarCielo(){
-
-    if(
-        lat===undefined||
-        lon===undefined
-    ){
-
+function dibujarCielo() {
+    if (
+        latitud === undefined ||
+        longitud === undefined
+    ) {
         return;
     }
 
-    const w=innerWidth;
-    const h=innerHeight;
+    const ancho = innerWidth;
+    const alto = innerHeight;
 
-    const cx=w/2;
-    const cy=h/2;
+    const centroX = ancho / 2;
+    const centroY = alto / 2;
 
     ctx.clearRect(
         0,
         0,
-        w,
-        h
+        ancho,
+        alto
     );
 
-    const base=
-        baseCamara();
+    const camaraActual = crearCamara();
+    const horaSideral = tiempoSideral();
 
-    const lst=
-        tiempoSideral();
-
-    const fx=
-        cx/
+    const fx =
+        centroX /
         Math.tan(
-            rad(fovH)/2
+            aRadianes(campoVision) / 2
         );
 
-    const fy=
-        cy/
+    const fy =
+        centroY /
         Math.tan(
-            rad(fovV)/2
+            aRadianes(campoVisionVertical) / 2
         );
 
     dibujarConstelaciones(
-        lst,
-        base,
+        horaSideral,
+        camaraActual,
         fx,
         fy,
-        cx,
-        cy
+        centroX,
+        centroY
     );
 
     dibujarEstrellas(
-        lst,
-        base,
+        horaSideral,
+        camaraActual,
         fx,
         fy,
-        cx,
-        cy
+        centroX,
+        centroY
     );
 
-    dibujarCuerpos(
-        base,
+    dibujarPlanetas(
+        camaraActual,
         fx,
         fy,
-        cx,
-        cy
+        centroX,
+        centroY
     );
 
     dibujarObjetivo(
-        base,
+        camaraActual,
         fx,
         fy,
-        cx,
-        cy
+        centroX,
+        centroY
     );
 }
 
-function activarSensores(){
-
-    if(sensoresActivados){
+function activarSensores() {
+    if (sensoresEncendidos) {
         return;
     }
 
-    sensoresActivados=true;
+    sensoresEncendidos = true;
 
     window.addEventListener(
         "deviceorientation",
-        e=>{
+        evento => {
 
-            if(
-                modo!=="ar"||
-                e.beta===null||
-                e.gamma===null
-            ){
-
+            if (
+                modo !== "ar" ||
+                evento.beta === null ||
+                evento.gamma === null
+            ) {
                 return;
             }
 
-            ultimoBeta=e.beta;
+            ultimaBeta = evento.beta;
 
-            let nuevoHeading;
+            let nuevaDireccion;
 
-            if(
-                typeof e.webkitCompassHeading===
-                "number"
-            ){
-
-                nuevoHeading=
+            if (
+                typeof evento.webkitCompassHeading === "number"
+            ) {
+                nuevaDireccion =
                     normalizar(
-                        e.webkitCompassHeading
+                        evento.webkitCompassHeading
                     );
 
-            }else if(
-                e.absolute&&
-                e.alpha!==null
-            ){
-
-                nuevoHeading=
+            } else if (
+                evento.absolute &&
+                evento.alpha !== null
+            ) {
+                nuevaDireccion =
                     normalizar(
-                        360-e.alpha
+                        360 - evento.alpha
                     );
 
-            }else{
-
+            } else {
                 return;
             }
 
-            const referencia=
-                betaReferencia??90;
+            const referencia =
+                referenciaBeta ?? 90;
 
-            const nuevoPitch=
+            const nuevaAltura =
                 limitar(
-                    e.beta-referencia,
+                    evento.beta - referencia,
                     -89,
                     89
                 );
 
-            const vertical=
-                Math.abs(nuevoPitch);
+            const vertical =
+                Math.abs(nuevaAltura);
 
-            let factorHeading=.15;
+            let suavizado = 0.15;
 
-            if(vertical>70){
-                factorHeading=.02;
-            }else if(vertical>55){
-                factorHeading=.05;
-            }else if(vertical>40){
-                factorHeading=.10;
+            if (vertical > 70) {
+                suavizado = 0.02;
+            } else if (vertical > 55) {
+                suavizado = 0.05;
+            } else if (vertical > 40) {
+                suavizado = 0.10;
             }
 
-            heading=
-                suavizarAngulo(
-                    heading,
-                    nuevoHeading,
-                    factorHeading
+            direccion =
+                moverSuave(
+                    direccion,
+                    nuevaDireccion,
+                    suavizado
                 );
 
-            pitch+=
-                (nuevoPitch-pitch)*.12;
+            altura +=
+                (nuevaAltura - altura) * 0.12;
 
-            roll+=
+            inclinacion +=
                 (
                     limitar(
-                        e.gamma,
+                        evento.gamma,
                         -45,
                         45
-                    )-
-                    roll
-                )*.08;
+                    ) - inclinacion
+                ) * 0.08;
 
-            UI.direccion.textContent=
-                `${heading.toFixed(1)}°`;
+            direccionTexto.textContent =
+                `${direccion.toFixed(1)}°`;
 
-            UI.altitud.textContent=
-                `${pitch.toFixed(1)}°`;
+            alturaTexto.textContent =
+                `${altura.toFixed(1)}°`;
 
-            UI.debug.textContent=
-                `α:${Math.round(e.alpha||0)} β:${Math.round(e.beta)} γ:${Math.round(e.gamma)}`;
+            debug.textContent =
+                `α:${Math.round(evento.alpha || 0)} ` +
+                `β:${Math.round(evento.beta)} ` +
+                `γ:${Math.round(evento.gamma)}`;
 
-            render();
+            actualizarPantalla();
         },
         true
     );
 }
 
-function calibrar(){
-
-    if(ultimoBeta===null){
-
-        alert(
-            "Activa los sensores primero."
-        );
-
+function calibrarSensores() {
+    if (ultimaBeta === null) {
+        alert("Activa los sensores primero.");
         return;
     }
 
-    betaReferencia=
-        ultimoBeta;
+    referenciaBeta = ultimaBeta;
+    altura = 0;
 
-    pitch=0;
+    alturaTexto.textContent = "0°";
 
-    UI.altitud.textContent="0°";
-
-    render();
+    actualizarPantalla();
 }
 
-function cambiarModo(){
-
-    modo=
-        modo==="ar"
-        ?"libre"
-        :"ar";
+function cambiarModo() {
+    if (modo === "ar") {
+        modo = "libre";
+    } else {
+        modo = "ar";
+    }
 
     document.body.classList.toggle(
         "modo-libre",
-        modo==="libre"
+        modo === "libre"
     );
 
-    UI.modo.textContent=
-        modo==="ar"
-        ?"Modo mapa libre"
-        :"Modo cámara (AR)";
+    botonModo.textContent =
+        modo === "ar"
+            ? "Modo mapa libre"
+            : "Modo cámara (AR)";
 
-    render();
+    actualizarPantalla();
 }
 
-function encontrarObjeto(){
-
-    if(!cuerpos.length){
-
+function buscarObjeto() {
+    if (!planetas.length) {
         alert(
             "Todavía estoy calculando los objetos del cielo."
         );
-
         return;
     }
 
-    const nombres=
-        cuerpos
-        .map(x=>x.nombre)
-        .join("\n");
+    const nombres =
+        planetas
+            .map(planeta => planeta.nombre)
+            .join("\n");
 
-    const texto=
-        prompt(
-            `¿Qué quieres encontrar?\n\n${nombres}`
-        );
+    const texto = prompt(
+        `¿Qué quieres encontrar?\n\n${nombres}`
+    );
 
-    if(!texto){
+    if (!texto) {
         return;
     }
 
-    const buscado=
+    const buscado =
         texto
-        .toLowerCase()
-        .trim();
+            .toLowerCase()
+            .trim();
 
-    const encontrado=
-        cuerpos.find(
-            x=>
-                x.nombre
-                .toLowerCase()===
-                buscado
+    const encontrado =
+        planetas.find(
+            planeta =>
+                planeta.nombre
+                    .toLowerCase() === buscado
         );
 
-    if(!encontrado){
-
-        alert(
-            "No encuentro ese objeto."
-        );
-
+    if (!encontrado) {
+        alert("No encuentro ese objeto.");
         return;
     }
 
-    objetivo={
+    objetoBuscado = {
         ...encontrado
     };
 
-    render();
+    actualizarPantalla();
 }
 
-UI.buscar?.addEventListener(
+botonBuscar?.addEventListener(
     "click",
-    encontrarObjeto
+    buscarObjeto
 );
 
 canvas.addEventListener(
     "pointerdown",
-    e=>{
+    evento => {
 
-        if(modo!=="libre"){
+        if (modo !== "libre") {
             return;
         }
 
-        arrastrando=true;
+        moviendo = true;
 
-        inicioX=e.clientX;
-        inicioY=e.clientY;
+        inicioX = evento.clientX;
+        inicioY = evento.clientY;
 
-        inicioHeading=heading;
-        inicioPitch=pitch;
+        inicioDireccion = direccion;
+        inicioAltura = altura;
 
         canvas.setPointerCapture?.(
-            e.pointerId
+            evento.pointerId
         );
     }
 );
 
 canvas.addEventListener(
     "pointermove",
-    e=>{
+    evento => {
 
-        if(!arrastrando){
+        if (!moviendo) {
             return;
         }
 
-        const dx=
-            e.clientX-inicioX;
+        const cambioX =
+            evento.clientX - inicioX;
 
-        const dy=
-            e.clientY-inicioY;
+        const cambioY =
+            evento.clientY - inicioY;
 
-        heading=
+        direccion =
             normalizar(
-                inicioHeading-
-                dx*fovH/innerWidth
+                inicioDireccion -
+                cambioX *
+                campoVision /
+                innerWidth
             );
 
-        pitch=
+        altura =
             limitar(
-                inicioPitch-
-                dy*fovV/innerHeight,
+                inicioAltura -
+                cambioY *
+                campoVisionVertical /
+                innerHeight,
                 -85,
                 85
             );
 
-        UI.direccion.textContent=
-            `${heading.toFixed(1)}°`;
+        direccionTexto.textContent =
+            `${direccion.toFixed(1)}°`;
 
-        UI.altitud.textContent=
-            `${pitch.toFixed(1)}°`;
+        alturaTexto.textContent =
+            `${altura.toFixed(1)}°`;
 
-        render();
+        actualizarPantalla();
     }
 );
 
 window.addEventListener(
     "pointerup",
-    ()=>{
-        arrastrando=false;
+    () => {
+        moviendo = false;
     }
 );
 
-async function iniciarCamara(){
-
-    if(
-        !navigator.mediaDevices||
+async function iniciarCamara() {
+    if (
+        !navigator.mediaDevices ||
         !navigator.mediaDevices.getUserMedia
-    ){
-
-        UI.error.textContent=
+    ) {
+        errorCamara.textContent =
             "La cámara no está disponible.";
 
-        UI.error.style.display="block";
-
+        errorCamara.style.display = "block";
         return;
     }
 
-    try{
-
-        const stream=
+    try {
+        const stream =
             await navigator.mediaDevices.getUserMedia({
-
-                video:{
-                    facingMode:{
-                        ideal:"environment"
+                video: {
+                    facingMode: {
+                        ideal: "environment"
                     }
                 },
-
-                audio:false
-
+                audio: false
             });
 
-        UI.camara.srcObject=stream;
+        camara.srcObject = stream;
 
-        await UI.camara.play?.();
+        await camara.play?.();
 
-    }catch(e){
+    } catch (error) {
 
-        console.error(e);
+        console.error(error);
 
-        UI.error.textContent=
-            `No se pudo iniciar la cámara: ${e.name}`;
+        errorCamara.textContent =
+            `No se pudo iniciar la cámara: ${error.name}`;
 
-        UI.error.style.display="block";
+        errorCamara.style.display = "block";
     }
 }
 
-UI.activar?.addEventListener(
+botonSensores?.addEventListener(
     "click",
-    async()=>{
+    async () => {
 
-        try{
+        try {
 
-            if(
-                typeof DeviceOrientationEvent!=="undefined"&&
-                typeof DeviceOrientationEvent.requestPermission===
-                "function"
-            ){
+            if (
+                typeof DeviceOrientationEvent !== "undefined" &&
+                typeof DeviceOrientationEvent.requestPermission === "function"
+            ) {
+                const permiso =
+                    await DeviceOrientationEvent.requestPermission();
 
-                const permiso=
-                    await DeviceOrientationEvent
-                    .requestPermission();
-
-                if(permiso!=="granted"){
-
-                    UI.debug.textContent=
+                if (permiso !== "granted") {
+                    debug.textContent =
                         "Permiso de sensores denegado.";
-
                     return;
                 }
             }
 
             activarSensores();
 
-            UI.activar.textContent=
+            botonSensores.textContent =
                 "Sensores activados";
 
-        }catch(e){
+        } catch (error) {
 
-            console.error(e);
+            console.error(error);
 
-            UI.debug.textContent=
+            debug.textContent =
                 "No se pudieron activar los sensores.";
         }
     }
 );
 
-UI.calibrar?.addEventListener(
+botonCalibrar?.addEventListener(
     "click",
-    calibrar
+    calibrarSensores
 );
 
-UI.modo?.addEventListener(
+botonModo?.addEventListener(
     "click",
     cambiarModo
 );
 
-if(UI.fov){
+if (sliderFov) {
 
-    UI.fov.value=fovH;
+    sliderFov.value = campoVision;
 
     actualizarFOV();
 
-    UI.fov.addEventListener(
+    sliderFov.addEventListener(
         "input",
-        ()=>{
+        () => {
 
-            fovH=
-                Number(
-                    UI.fov.value
-                );
+            campoVision =
+                Number(sliderFov.value);
 
             localStorage.setItem(
                 "fovH",
-                fovH
+                campoVision
             );
 
             actualizarFOV();
 
-            if(UI.fovTexto){
-
-                UI.fovTexto.textContent=
-                    `${fovH}°`;
+            if (textoFov) {
+                textoFov.textContent =
+                    `${campoVision}°`;
             }
 
-            render();
+            actualizarPantalla();
         }
     );
 }
 
-if(UI.fovTexto){
-
-    UI.fovTexto.textContent=
-        `${fovH}°`;
+if (textoFov) {
+    textoFov.textContent =
+        `${campoVision}°`;
 }
 
-function actualizarFOV(){
-
-    if(!innerWidth){
+function actualizarFOV() {
+    if (!innerWidth) {
         return;
     }
 
-    fovV=
-        2*
-        deg(
+    campoVisionVertical =
+        2 *
+        aGrados(
             Math.atan(
                 Math.tan(
-                    rad(fovH)/2
-                )*
-                innerHeight/
+                    aRadianes(campoVision) / 2
+                ) *
+                innerHeight /
                 innerWidth
             )
         );
 }
 
-function ajustarCanvas(){
-
-    const dpr=
+function ajustarCanvas() {
+    const pixelRatio =
         Math.min(
-            window.devicePixelRatio||1,
+            window.devicePixelRatio || 1,
             2
         );
 
-    canvas.width=
-        innerWidth*dpr;
+    canvas.width =
+        innerWidth * pixelRatio;
 
-    canvas.height=
-        innerHeight*dpr;
+    canvas.height =
+        innerHeight * pixelRatio;
 
-    canvas.style.width=
+    canvas.style.width =
         `${innerWidth}px`;
 
-    canvas.style.height=
+    canvas.style.height =
         `${innerHeight}px`;
 
     ctx.setTransform(
-        dpr,
+        pixelRatio,
         0,
         0,
-        dpr,
+        pixelRatio,
         0,
         0
     );
 
     actualizarFOV();
-
-    render();
+    actualizarPantalla();
 }
 
 window.addEventListener(
@@ -1482,35 +1309,36 @@ window.addEventListener(
     ajustarCanvas
 );
 
-function escribir(){
+function mostrarInicio() {
 
-    const texto=
-        "Tu ubicación es";
+    const texto = "Tu ubicación es";
 
-    let i=0;
+    let posicion = 0;
 
-    UI.mensaje.textContent="";
+    mensaje.textContent = "";
 
-    const timer=
-        setInterval(()=>{
+    const escribir = setInterval(
+        () => {
 
-            if(i>=texto.length){
+            if (posicion >= texto.length) {
 
-                clearInterval(timer);
+                clearInterval(escribir);
 
-                obtenerUbicacion();
+                conseguirUbicacion();
 
                 return;
             }
 
-            UI.mensaje.textContent+=
-                texto[i++];
+            mensaje.textContent +=
+                texto[posicion];
 
-        },60);
+            posicion++;
+
+        },
+        60
+    );
 }
 
 ajustarCanvas();
-
-escribir();
-
+mostrarInicio();
 iniciarCamara();
