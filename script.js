@@ -23,14 +23,31 @@ let constelaciones = [];
 let heading = 0;
 let pitch = 0;
 
+let headingInicializado = false;
+
+// 1 = sin suavizado (responde instantáneo, pero con cortes).
+// Valores bajos = más suave, pero con algo más de "inercia".
+
+const FACTOR_SUAVIZADO_HEADING = 0.15;
+
 // Calibración del horizonte: cada móvil/persona reporta "beta" distinto,
 // así que en vez de asumir un valor fijo, se calibra apuntando al horizonte.
 
 let referenciaBeta = null;
 let ultimoBetaCrudo = null;
 
-const FOV_HORIZONTAL = 90;
-const FOV_VERTICAL = 60;
+// El FOV real de la cámara varía por modelo de móvil. Empezamos con un
+// valor típico de cámara trasera (más estrecho que el 90° anterior,
+// que hacía que todo se viera encogido hacia el centro) y se puede
+// ajustar en vivo con el slider; se recuerda entre sesiones.
+
+const RELACION_FOV = 50 / 66;
+
+let FOV_HORIZONTAL =
+    Number(localStorage.getItem("fovHorizontal")) || 66;
+
+let FOV_VERTICAL =
+    Number(localStorage.getItem("fovVertical")) || 50;
 
 // "ar" = cámara real + sensores del móvil
 // "libre" = sin cámara, arrastras con el dedo/ratón (como Stellarium de escritorio)
@@ -814,7 +831,8 @@ function activarSensores() {
 
 
             // =================================================
-            // DIRECCIÓN
+            // DIRECCIÓN (suavizada para evitar "cortes" por
+            // ruido del magnetómetro/brújula)
             // =================================================
 
             if (
@@ -822,11 +840,37 @@ function activarSensores() {
                 !Number.isNaN(nuevoHeading)
             ) {
 
-                heading =
-                    (
-                        nuevoHeading +
-                        360
-                    ) % 360;
+                const headingNormalizado =
+                    (nuevoHeading + 360) % 360;
+
+
+                if (!headingInicializado) {
+
+                    heading =
+                        headingNormalizado;
+
+                    headingInicializado = true;
+
+                } else {
+
+                    // Diferencia más corta entre el heading actual
+                    // y el nuevo, teniendo en cuenta el paso 360°→0°
+
+                    let diferencia =
+                        headingNormalizado - heading;
+
+                    diferencia =
+                        ((diferencia + 180) % 360 + 360) % 360 - 180;
+
+
+                    heading =
+                        (
+                            heading +
+                            diferencia * FACTOR_SUAVIZADO_HEADING +
+                            360
+                        ) % 360;
+
+                }
 
 
                 direccionElemento.textContent =
@@ -874,6 +918,54 @@ function activarSensores() {
 
         },
         true
+    );
+
+}
+
+
+// =====================================================
+// CALIBRAR CAMPO DE VISIÓN (FOV)
+// =====================================================
+
+const fovSlider =
+    document.getElementById("fovSlider");
+
+const fovValorTexto =
+    document.getElementById("fovValor");
+
+
+if (fovSlider) {
+
+    fovSlider.value = FOV_HORIZONTAL;
+
+    if (fovValorTexto) {
+        fovValorTexto.textContent = FOV_HORIZONTAL + "°";
+    }
+
+
+    fovSlider.addEventListener(
+        "input",
+        () => {
+
+            FOV_HORIZONTAL =
+                Number(fovSlider.value);
+
+            FOV_VERTICAL =
+                Math.round(FOV_HORIZONTAL * RELACION_FOV);
+
+
+            if (fovValorTexto) {
+                fovValorTexto.textContent = FOV_HORIZONTAL + "°";
+            }
+
+
+            localStorage.setItem("fovHorizontal", FOV_HORIZONTAL);
+            localStorage.setItem("fovVertical", FOV_VERTICAL);
+
+
+            dibujarCielo();
+
+        }
     );
 
 }
