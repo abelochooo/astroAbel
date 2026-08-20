@@ -542,7 +542,7 @@ function dibujarPlanetas(
     const tamaños = {
 
         Sol: 16,
-        Luna: 13,
+        Luna: 18,
         Júpiter: 8,
         Saturno: 7,
         Venus: 6,
@@ -587,26 +587,46 @@ function dibujarPlanetas(
         }
 
         const tamaño =
-            tamaños[
-                planeta.nombre
-            ] || 5;
+    tamaños[
+        planeta.nombre
+    ] || 5;
 
-        ctx.beginPath();
+if (
+    planeta.nombre === "Luna" &&
+    Number.isFinite(
+        planeta.fraccionIluminada
+    )
+) {
 
-        ctx.arc(
-            punto.x,
-            punto.y,
-            tamaño,
-            0,
-            Math.PI * 2
-        );
+    dibujarLuna(
+        ctx,
+        punto.x,
+        punto.y,
+        tamaño,
+        planeta.fraccionIluminada,
+        planeta.elongacion
+    );
 
-        ctx.fillStyle =
-            colores[
-                planeta.nombre
-            ] || "#ffd27f";
+} else {
 
-        ctx.fill();
+    ctx.beginPath();
+
+    ctx.arc(
+        punto.x,
+        punto.y,
+        tamaño,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fillStyle =
+        colores[
+            planeta.nombre
+        ] || "#ffd27f";
+
+    ctx.fill();
+}
+
 
         ctx.fillStyle =
             "rgba(255,255,255,.9)";
@@ -916,7 +936,106 @@ function dibujarLuna(
 ) {
     ctx.save();
 
+    /*
+     * Limitar la fase por seguridad.
+     */
+    fraccion =
+        limitar(
+            fraccion,
+            0,
+            1
+        );
+
+
+    /*
+     * Fondo oscuro de la Luna.
+     */
     ctx.beginPath();
+
+    ctx.arc(
+        x,
+        y,
+        radio,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fillStyle =
+        "#242424";
+
+    ctx.fill();
+
+
+    /*
+     * Luna nueva:
+     * prácticamente no vemos superficie iluminada.
+     */
+    if (fraccion <= 0.001) {
+        ctx.restore();
+        return;
+    }
+
+
+    /*
+     * Luna llena:
+     * todo el disco iluminado.
+     */
+    if (fraccion >= 0.999) {
+
+        ctx.beginPath();
+
+        ctx.arc(
+            x,
+            y,
+            radio,
+            0,
+            Math.PI * 2
+        );
+
+        ctx.fillStyle =
+            "#eeeecc";
+
+        ctx.fill();
+
+        ctx.restore();
+        return;
+    }
+
+
+    /*
+     * Cuánto de la elipse queda visible.
+     *
+     * 0   = cuarto
+     * 1   = llena
+     */
+    const ancho =
+        Math.abs(
+            2 * fraccion - 1
+        ) * radio;
+
+
+    /*
+     * El signo determina si estamos viendo
+     * creciente o menguante.
+     *
+     * AngleFromSun devuelve el ángulo de elongación
+     * de la Luna respecto al Sol.
+     */
+    const creciente =
+        elongacion >= 0;
+
+
+    /*
+     * Primero dibujamos la zona iluminada
+     * como una intersección entre:
+     *
+     * - un semicírculo
+     * - una elipse
+     */
+    ctx.save();
+
+    ctx.beginPath();
+
     ctx.arc(
         x,
         y,
@@ -927,34 +1046,98 @@ function dibujarLuna(
 
     ctx.clip();
 
-    // Parte oscura
-    ctx.fillStyle = "#151515";
-    ctx.fillRect(
-        x - radio,
-        y - radio,
-        radio * 2,
-        radio * 2
-    );
 
-    // Parte iluminada
-    const ancho =
-        radio *
-        (2 * fraccion - 1);
-
+    /*
+     * Semicírculo base.
+     */
     ctx.beginPath();
 
+    if (creciente) {
+
+        ctx.arc(
+            x,
+            y,
+            radio,
+            -Math.PI / 2,
+            Math.PI / 2
+        );
+
+    } else {
+
+        ctx.arc(
+            x,
+            y,
+            radio,
+            Math.PI / 2,
+            -Math.PI / 2
+        );
+    }
+
+
+    /*
+     * Elipse que determina la frontera
+     * entre luz y sombra.
+     */
     ctx.ellipse(
         x,
         y,
-        Math.abs(ancho),
+        ancho,
         radio,
         0,
         0,
         Math.PI * 2
     );
 
-    ctx.fillStyle = "#eeeeee";
+
+    ctx.fillStyle =
+        "#eeeecc";
+
     ctx.fill();
+
+
+    ctx.restore();
+
+
+    /*
+     * Añadir un pequeño brillo.
+     */
+    const gradiente =
+        ctx.createRadialGradient(
+            x - radio * 0.3,
+            y - radio * 0.3,
+            0,
+            x,
+            y,
+            radio
+        );
+
+    gradiente.addColorStop(
+        0,
+        "rgba(255,255,240,.25)"
+    );
+
+    gradiente.addColorStop(
+        1,
+        "rgba(255,255,240,0)"
+    );
+
+
+    ctx.beginPath();
+
+    ctx.arc(
+        x,
+        y,
+        radio,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fillStyle =
+        gradiente;
+
+    ctx.fill();
+
 
     ctx.restore();
 }
+

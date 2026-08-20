@@ -170,11 +170,24 @@ export function calcularPlanetas() {
                     "normal"
                 );
 
-                return {
-                    nombre: nombre,
-                    azimut: normalizar(cielo.azimuth),
-                    altura: cielo.altitude
-                };
+                const resultado = {
+    nombre: nombre,
+    azimut: normalizar(cielo.azimuth),
+    altura: cielo.altitude
+};
+
+if (nombreIngles === "Moon") {
+    const fase = calcularFaseLunar(ahora);
+
+    resultado.fraccionIluminada =
+        fase.fraccionIluminada;
+
+    resultado.elongacion =
+        fase.elongacion;
+}
+
+return resultado;
+
             } catch (error) {
                 console.error(error);
                 return null;
