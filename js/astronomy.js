@@ -216,16 +216,6 @@ export function calcularFaseLunar(fecha) {
             "Moon",
             fecha
         );
-    
-    const fase =
-    calcularFaseLunar(fecha);
-
-luna.fase =
-    fase.fraccionIluminada;
-
-luna.elongacion =
-    fase.elongacion;
-
 
     return {
         fraccionIluminada:
@@ -235,3 +225,4 @@ luna.elongacion =
             elongacion
     };
 }
+
