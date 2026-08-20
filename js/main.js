@@ -12,8 +12,16 @@ import {
     iniciarCamara
 } from "./camera.js";
 
+import {
+    cargarViaLactea
+} from "./milkyWay.js";
+
 
 async function iniciarAplicacion() {
+
+    await cargarViaLactea(
+        "./assets/gaia-sky.jpg"
+    );
 
     ajustarCanvas();
 

@@ -17,6 +17,10 @@ import {
     tiempoSideral
 } from "./astronomy.js";
 
+import {
+    dibujarViaLactea
+} from "./milkyWay.js";
+
 
 export const canvas =
     document.getElementById(
@@ -28,6 +32,7 @@ export const ctx =
 
 
 export function actualizarFOV() {
+
     if (!innerWidth) {
         return;
     }
@@ -52,6 +57,7 @@ export function crearVector(
     azimut,
     altura
 ) {
+
     const az =
         aRadianes(azimut);
 
@@ -59,6 +65,7 @@ export function crearVector(
         aRadianes(altura);
 
     return {
+
         x:
             Math.cos(alt) *
             Math.sin(az),
@@ -74,6 +81,7 @@ export function crearVector(
 
 
 export function productoPunto(a, b) {
+
     return (
         a.x * b.x +
         a.y * b.y +
@@ -83,7 +91,9 @@ export function productoPunto(a, b) {
 
 
 export function productoCruz(a, b) {
+
     return {
+
         x:
             a.y * b.z -
             a.z * b.y,
@@ -100,6 +110,7 @@ export function productoCruz(a, b) {
 
 
 export function normalizarVector(vector) {
+
     const tamaño =
         Math.hypot(
             vector.x,
@@ -108,6 +119,7 @@ export function normalizarVector(vector) {
         ) || 1;
 
     return {
+
         x: vector.x / tamaño,
         y: vector.y / tamaño,
         z: vector.z / tamaño
@@ -164,6 +176,7 @@ export function crearCamara() {
         );
 
     return {
+
         haciaDondeMiro,
         derecha,
         arriba
@@ -180,6 +193,7 @@ export function ponerEnPantalla(
     centroX,
     centroY
 ) {
+
     const objeto =
         crearVector(
             azimut,
@@ -240,6 +254,7 @@ function dibujarEstrellas(
     centroX,
     centroY
 ) {
+
     for (
         const estrella of estado.estrellas
     ) {
@@ -295,7 +310,6 @@ function dibujarEstrellas(
                 3.8 -
                 magnitud *
                 0.45,
-
                 0.5,
                 5
             );
@@ -304,7 +318,6 @@ function dibujarEstrellas(
             limitar(
                 1.2 -
                 magnitud / 8,
-
                 0.15,
                 1
             );
@@ -335,6 +348,7 @@ function dibujarConstelaciones(
     centroX,
     centroY
 ) {
+
     ctx.strokeStyle =
         "rgba(120,170,255,.55)";
 
@@ -441,6 +455,7 @@ function dibujarConstelaciones(
         }
 
         if (nombrePunto) {
+
             ctx.fillText(
                 constelacion.nombre || "",
                 nombrePunto.x + 6,
@@ -458,7 +473,9 @@ function dibujarPlanetas(
     centroX,
     centroY
 ) {
+
     const tamaños = {
+
         Sol: 16,
         Luna: 13,
         Júpiter: 8,
@@ -469,6 +486,7 @@ function dibujarPlanetas(
     };
 
     const colores = {
+
         Sol: "#fff0a0",
         Luna: "#e8e8e0",
         Júpiter: "#e8c28c",
@@ -549,6 +567,7 @@ function dibujarObjetivo(
     centroX,
     centroY
 ) {
+
     if (!estado.objetoBuscado) {
         return;
     }
@@ -617,9 +636,11 @@ function dibujarObjetivo(
             "bold 18px Arial";
 
         ctx.fillText(
+
             `${Math.abs(Math.round(
                 diferenciaHorizontal
             ))}° ` +
+
             `${diferenciaHorizontal > 0
                 ? "→"
                 : "←"}   ` +
@@ -670,6 +691,7 @@ export function dibujarCielo() {
         alto
     );
 
+
     const camaraActual =
         crearCamara();
 
@@ -692,6 +714,25 @@ export function dibujarCielo() {
             ) / 2
         );
 
+
+    // ==========================================
+    // VÍA LÁCTEA
+    // ==========================================
+
+    dibujarViaLactea(
+        ctx,
+        camaraActual,
+        fx,
+        fy,
+        centroX,
+        centroY
+    );
+
+
+    // ==========================================
+    // CONSTELACIONES
+    // ==========================================
+
     dibujarConstelaciones(
         horaSideral,
         camaraActual,
@@ -700,6 +741,11 @@ export function dibujarCielo() {
         centroX,
         centroY
     );
+
+
+    // ==========================================
+    // ESTRELLAS
+    // ==========================================
 
     dibujarEstrellas(
         horaSideral,
@@ -710,6 +756,11 @@ export function dibujarCielo() {
         centroY
     );
 
+
+    // ==========================================
+    // PLANETAS
+    // ==========================================
+
     dibujarPlanetas(
         camaraActual,
         fx,
@@ -717,6 +768,11 @@ export function dibujarCielo() {
         centroX,
         centroY
     );
+
+
+    // ==========================================
+    // OBJETIVO
+    // ==========================================
 
     dibujarObjetivo(
         camaraActual,
@@ -730,6 +786,7 @@ export function dibujarCielo() {
 
 let renderPendiente = false;
 
+
 export function actualizarPantalla() {
 
     if (renderPendiente) {
@@ -739,8 +796,11 @@ export function actualizarPantalla() {
     renderPendiente = true;
 
     requestAnimationFrame(() => {
+
         renderPendiente = false;
+
         dibujarCielo();
+
     });
 }
 
@@ -754,10 +814,12 @@ export function ajustarCanvas() {
         );
 
     canvas.width =
-        innerWidth * pixelRatio;
+        innerWidth *
+        pixelRatio;
 
     canvas.height =
-        innerHeight * pixelRatio;
+        innerHeight *
+        pixelRatio;
 
     canvas.style.width =
         `${innerWidth}px`;
