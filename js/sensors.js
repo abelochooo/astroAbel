@@ -287,24 +287,20 @@ function procesarEvento(
      */
 
     if (
-        typeof evento.webkitCompassHeading ===
-        "number" &&
-        Number.isFinite(
+    !absoluta &&
+    typeof evento.webkitCompassHeading === "number" &&
+    Number.isFinite(evento.webkitCompassHeading)
+) {
+    const heading =
+        normalizar(
             evento.webkitCompassHeading
-        )
-    ) {
+        );
 
-        const heading =
-            normalizar(
-                evento.webkitCompassHeading
-            );
-
-
-        alpha =
-            normalizar(
-                360 - heading
-            );
-    }
+    alpha =
+        normalizar(
+            360 - heading
+        );
+}
 
 
     if (
