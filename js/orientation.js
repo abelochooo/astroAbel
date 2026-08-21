@@ -225,12 +225,51 @@ export function actualizarOrientacion(
      * valor estable.
      */
 
-    const umbralMovimiento = 1.2; // m/s², ajustable
-    const enMovimiento =
-        estado.aceleracionLineal > umbralMovimiento;
+    const umbralCongelar = 2.0;   // por encima de esto, ignoramos el frame
+    const umbralAmortiguar = 0.6; // por encima de esto, suavizamos muchísimo menos
 
-    const factorAzimut = enMovimiento ? 0.04 : 0.20;
-    const factorAltura = enMovimiento ? 0.03 : 0.16;
+    /*
+     * Movimiento fuerte (traslación clara):
+     * no actualizamos nada, nos quedamos con el
+     * último valor bueno conocido. Evita que la
+     * estrella salte mientras mueves el móvil.
+     */
+    if (
+        estado.aceleracionLineal > umbralCongelar &&
+        azimutSuavizado !== null &&
+        alturaSuavizada !== null
+    ) {
+        const orientacionCongelada =
+            calcularOrientacion(
+                azimutSuavizado,
+                alturaSuavizada
+            );
+
+        estado.orientacion = {
+            haciaDondeMiro:
+                orientacionCongelada.haciaDondeMiro,
+
+            derecha:
+                orientacionCongelada.derecha,
+
+            arriba:
+                orientacionCongelada.arriba,
+
+            disponible: true,
+
+            absoluta
+        };
+
+        estado.inclinacion = gamma;
+
+        return true;
+    }
+
+    const enMovimiento =
+        estado.aceleracionLineal > umbralAmortiguar;
+
+    const factorAzimut = enMovimiento ? 0.03 : 0.20;
+    const factorAltura = enMovimiento ? 0.02 : 0.16;
 
     azimutSuavizado =
         suavizarAngulo(
