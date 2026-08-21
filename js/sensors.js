@@ -45,10 +45,32 @@ export async function solicitarPermisoSensores() {
                 await DeviceOrientationEvent
                     .requestPermission();
 
-            return permiso === "granted";
+            if (permiso !== "granted") {
+                return false;
+            }
         } catch (error) {
             console.error(error);
             return false;
+        }
+    }
+
+    /*
+     * iOS pide un permiso APARTE para DeviceMotionEvent
+     * (aceleración). Lo necesitamos para detectar
+     * traslación física del móvil y así no confundirla
+     * con una inclinación real. Si el usuario lo deniega,
+     * seguimos funcionando, simplemente sin ese filtro.
+     */
+
+    if (
+        typeof DeviceMotionEvent !== "undefined" &&
+        typeof DeviceMotionEvent.requestPermission ===
+            "function"
+    ) {
+        try {
+            await DeviceMotionEvent.requestPermission();
+        } catch (error) {
+            console.error(error);
         }
     }
 
@@ -71,6 +93,22 @@ export function activarSensores() {
     window.addEventListener(
         "deviceorientation",
         manejarOrientacion,
+        true
+    );
+
+    /*
+     * Detectar traslación física del móvil.
+     *
+     * "acceleration" (sin gravedad) solo es distinto de ~0
+     * cuando el móvil se desplaza en el espacio, no cuando
+     * solo rota. Lo usamos para desconfiar de beta/gamma
+     * mientras dura ese movimiento, evitando que las
+     * estrellas "viajen" contigo.
+     */
+
+    window.addEventListener(
+        "devicemotion",
+        manejarMovimiento,
         true
     );
 
@@ -145,6 +183,42 @@ function manejarOrientacion(evento) {
         evento.gamma,
         heading
     );
+}
+
+// ============================================================
+// DETECTAR TRASLACIÓN FÍSICA (devicemotion)
+// ============================================================
+
+function manejarMovimiento(evento) {
+    const acc = evento.acceleration;
+
+    if (
+        !acc ||
+        !Number.isFinite(acc.x) ||
+        !Number.isFinite(acc.y) ||
+        !Number.isFinite(acc.z)
+    ) {
+        /*
+         * Algunos navegadores/dispositivos no dan
+         * "acceleration" sin gravedad de forma fiable.
+         * En ese caso no penalizamos nada.
+         */
+        estado.aceleracionLineal = 0;
+        return;
+    }
+
+    const magnitud = Math.hypot(
+        acc.x,
+        acc.y,
+        acc.z
+    );
+
+    /*
+     * Suavizamos también esta señal para no reaccionar
+     * a ruido de un solo frame.
+     */
+    estado.aceleracionLineal +=
+        (magnitud - estado.aceleracionLineal) * 0.3;
 }
 
 // ============================================================

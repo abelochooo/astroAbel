@@ -213,11 +213,30 @@ export function actualizarOrientacion(
      * no debe provocar un salto de 359 grados.
      */
 
+    /*
+     * Si detectamos que el móvil se está desplazando
+     * físicamente (no solo rotando), el acelerómetro
+     * puede estar "contaminando" beta/alpha y haciéndonos
+     * creer que hemos inclinado el teléfono cuando en
+     * realidad solo lo hemos movido en el espacio.
+     *
+     * En ese caso reducimos mucho el factor de suavizado
+     * para no seguir ese ruido; confiamos más en el último
+     * valor estable.
+     */
+
+    const umbralMovimiento = 1.2; // m/s², ajustable
+    const enMovimiento =
+        estado.aceleracionLineal > umbralMovimiento;
+
+    const factorAzimut = enMovimiento ? 0.04 : 0.20;
+    const factorAltura = enMovimiento ? 0.03 : 0.16;
+
     azimutSuavizado =
         suavizarAngulo(
             azimutSuavizado,
             heading,
-            0.20
+            factorAzimut
         );
 
     /*
@@ -229,7 +248,7 @@ export function actualizarOrientacion(
     } else {
         alturaSuavizada +=
             (altura - alturaSuavizada) *
-            0.16;
+            factorAltura;
     }
 
     /*

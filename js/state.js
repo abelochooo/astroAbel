@@ -44,6 +44,10 @@ export const estado = {
     ultimaBeta: null,
     ultimaGamma: null,
 
+    // Aceleración lineal detectada (traslación física del móvil)
+    // Se usa para desconfiar del beta/gamma durante el movimiento.
+    aceleracionLineal: 0,
+
     // Compatibilidad
     referenciaBeta: null,
 
