@@ -13,10 +13,18 @@ function grados(radianes) {
 }
 
 function normalizarVector(v) {
-    const longitud = Math.hypot(v.x, v.y, v.z);
+    const longitud = Math.hypot(
+        v.x,
+        v.y,
+        v.z
+    );
 
     if (longitud < 0.000001) {
-        return { x: 0, y: 0, z: 0 };
+        return {
+            x: 0,
+            y: 0,
+            z: 0
+        };
     }
 
     return {
@@ -28,54 +36,204 @@ function normalizarVector(v) {
 
 function productoCruz(a, b) {
     return {
-        x: a.y * b.z - a.z * b.y,
-        y: a.z * b.x - a.x * b.z,
-        z: a.x * b.y - a.y * b.x
+        x:
+            a.y * b.z -
+            a.z * b.y,
+
+        y:
+            a.z * b.x -
+            a.x * b.z,
+
+        z:
+            a.x * b.y -
+            a.y * b.x
     };
 }
 
-function productoPunto(a, b) {
-    return (
-        a.x * b.x +
-        a.y * b.y +
-        a.z * b.z
-    );
+// ============================================================
+// CUATERNIONES
+// ============================================================
+
+function cuaternionDesdeEuler(
+    alpha,
+    beta,
+    gamma
+) {
+    /*
+     * Convención de DeviceOrientation:
+     *
+     * alpha = rotación Z
+     * beta  = rotación X
+     * gamma = rotación Y
+     *
+     * Se utiliza la convención YXZ,
+     * que es la utilizada habitualmente
+     * para DeviceOrientation.
+     */
+
+    const a = alpha / 2;
+    const b = beta / 2;
+    const c = gamma / 2;
+
+    const cA = Math.cos(a);
+    const sA = Math.sin(a);
+
+    const cB = Math.cos(b);
+    const sB = Math.sin(b);
+
+    const cC = Math.cos(c);
+    const sC = Math.sin(c);
+
+    /*
+     * Euler YXZ:
+     *
+     * q = qY * qX * qZ
+     */
+
+    let q = {
+        x:
+            sB * cC * cA -
+            cB * sC * sA,
+
+        y:
+            cB * sC * cA +
+            sB * cC * sA,
+
+        z:
+            cB * cC * sA -
+            sB * sC * cA,
+
+        w:
+            cB * cC * cA +
+            sB * sC * sA
+    };
+
+    /*
+     * Corrección para cámara trasera.
+     *
+     * Equivale a la transformación utilizada
+     * por las implementaciones estándar de
+     * DeviceOrientationControls.
+     */
+
+    const qC = {
+        x: -Math.SQRT1_2,
+        y: 0,
+        z: 0,
+        w: Math.SQRT1_2
+    };
+
+    q = multiplicarCuaterniones(q, qC);
+
+    // --------------------------------------------------------
+    // ORIENTACIÓN FÍSICA DE LA PANTALLA
+    // --------------------------------------------------------
+
+    const anguloPantalla =
+        obtenerAnguloPantalla();
+
+    if (anguloPantalla !== 0) {
+        const qPantalla =
+            cuaternionZ(
+                -radianes(anguloPantalla)
+            );
+
+        q =
+            multiplicarCuaterniones(
+                q,
+                qPantalla
+            );
+    }
+
+    return normalizarCuaternion(q);
 }
 
-// ============================================================
-// ROTACIONES
-// ============================================================
-
-function rotarX(v, angulo) {
-    const c = Math.cos(angulo);
-    const s = Math.sin(angulo);
+function cuaternionZ(angulo) {
+    const mitad = angulo / 2;
 
     return {
+        x: 0,
+        y: 0,
+        z: Math.sin(mitad),
+        w: Math.cos(mitad)
+    };
+}
+
+function multiplicarCuaterniones(a, b) {
+    return {
+        x:
+            a.w * b.x +
+            a.x * b.w +
+            a.y * b.z -
+            a.z * b.y,
+
+        y:
+            a.w * b.y -
+            a.x * b.z +
+            a.y * b.w +
+            a.z * b.x,
+
+        z:
+            a.w * b.z +
+            a.x * b.y -
+            a.y * b.x +
+            a.z * b.w,
+
+        w:
+            a.w * b.w -
+            a.x * b.x -
+            a.y * b.y -
+            a.z * b.z
+    };
+}
+
+function normalizarCuaternion(q) {
+    const longitud =
+        Math.hypot(
+            q.x,
+            q.y,
+            q.z,
+            q.w
+        ) || 1;
+
+    return {
+        x: q.x / longitud,
+        y: q.y / longitud,
+        z: q.z / longitud,
+        w: q.w / longitud
+    };
+}
+
+function conjugarCuaternion(q) {
+    return {
+        x: -q.x,
+        y: -q.y,
+        z: -q.z,
+        w: q.w
+    };
+}
+
+function rotarVectorConCuaternion(v, q) {
+    const p = {
         x: v.x,
-        y: v.y * c - v.z * s,
-        z: v.y * s + v.z * c
-    };
-}
-
-function rotarY(v, angulo) {
-    const c = Math.cos(angulo);
-    const s = Math.sin(angulo);
-
-    return {
-        x: v.x * c + v.z * s,
         y: v.y,
-        z: -v.x * s + v.z * c
+        z: v.z,
+        w: 0
     };
-}
 
-function rotarZ(v, angulo) {
-    const c = Math.cos(angulo);
-    const s = Math.sin(angulo);
+    const resultado =
+        multiplicarCuaterniones(
+            multiplicarCuaterniones(
+                q,
+                p
+            ),
+            conjugarCuaternion(q)
+        );
 
     return {
-        x: v.x * c - v.y * s,
-        y: v.x * s + v.y * c,
-        z: v.z
+        x: resultado.x,
+        y: resultado.y,
+        z: resultado.z
     };
 }
 
@@ -91,7 +249,9 @@ function obtenerAnguloPantalla() {
         return screen.orientation.angle;
     }
 
-    if (typeof window.orientation === "number") {
+    if (
+        typeof window.orientation === "number"
+    ) {
         return window.orientation;
     }
 
@@ -99,19 +259,7 @@ function obtenerAnguloPantalla() {
 }
 
 // ============================================================
-// ORIENTACIÓN
-//
-// Sistema del cielo:
-//
-// X = Este
-// Y = Norte
-// Z = Arriba
-//
-// Sistema local:
-//
-// X = derecha
-// Y = arriba
-// Z = hacia fuera de la pantalla
+// CALCULAR ORIENTACIÓN
 // ============================================================
 
 export function calcularOrientacion(
@@ -119,129 +267,99 @@ export function calcularOrientacion(
     betaGrados,
     gammaGrados
 ) {
-    const alpha = radianes(alphaGrados);
-    const beta = radianes(betaGrados);
-    const gamma = radianes(gammaGrados);
-
-    const anguloPantalla =
-        radianes(obtenerAnguloPantalla());
-
-    // Cámara trasera:
-    // mira hacia fuera de la pantalla.
-    let haciaDondeMiro = transformarVector(
-        {
-            x: 0,
-            y: 0,
-            z: -1
-        },
-        alpha,
-        beta,
-        gamma
-    );
-
-    // Arriba de pantalla.
-    let arribaLocal = {
-        x: 0,
-        y: 1,
-        z: 0
-    };
-
-    // Derecha de pantalla.
-    let derechaLocal = {
-        x: 1,
-        y: 0,
-        z: 0
-    };
-
-    // Corregir rotación física de pantalla.
-    arribaLocal = rotarZ(
-        arribaLocal,
-        -anguloPantalla
-    );
-
-    derechaLocal = rotarZ(
-        derechaLocal,
-        -anguloPantalla
-    );
-
-    let arriba = transformarVector(
-        arribaLocal,
-        alpha,
-        beta,
-        gamma
-    );
-
-    let derecha = transformarVector(
-        derechaLocal,
-        alpha,
-        beta,
-        gamma
-    );
-
-    haciaDondeMiro =
-        normalizarVector(haciaDondeMiro);
+    const q =
+        cuaternionDesdeEuler(
+            radianes(alphaGrados),
+            radianes(betaGrados),
+            radianes(gammaGrados)
+        );
 
     /*
-     * Construimos una base ortogonal usando
-     * la dirección de visión y el vector arriba.
+     * Sistema del renderer:
      *
-     * Esto evita pequeñas deformaciones producidas
-     * por ruido del sensor.
+     * X = Este
+     * Y = Norte
+     * Z = Arriba
+     *
+     * Cámara:
+     *
+     * -Z = delante
+     * +Y = arriba
+     * +X = derecha
      */
 
-    derecha = normalizarVector(
-        productoCruz(
-            haciaDondeMiro,
-            arriba
-        )
-    );
+    const delante =
+        rotarVectorConCuaternion(
+            {
+                x: 0,
+                y: 0,
+                z: -1
+            },
+            q
+        );
 
-    arriba = normalizarVector(
-        productoCruz(
-            derecha,
-            haciaDondeMiro
-        )
-    );
+    const arriba =
+        rotarVectorConCuaternion(
+            {
+                x: 0,
+                y: 1,
+                z: 0
+            },
+            q
+        );
+
+    const derecha =
+        rotarVectorConCuaternion(
+            {
+                x: 1,
+                y: 0,
+                z: 0
+            },
+            q
+        );
 
     return {
-        haciaDondeMiro,
-        derecha,
-        arriba
+        haciaDondeMiro:
+            normalizarVector(delante),
+
+        derecha:
+            normalizarVector(derecha),
+
+        arriba:
+            normalizarVector(arriba)
     };
 }
 
 // ============================================================
-// TRANSFORMACIÓN
+// SUAVIZADO
 // ============================================================
 
-function transformarVector(
-    vector,
-    alpha,
-    beta,
-    gamma
+let orientacionSuavizada = null;
+
+function suavizarVector(
+    anterior,
+    nuevo,
+    factor
 ) {
-    /*
-     * Esta secuencia corresponde al sistema de
-     * DeviceOrientation y se mantiene única para
-     * todos los sensores.
-     */
+    if (!anterior) {
+        return {
+            ...nuevo
+        };
+    }
 
-    let resultado = rotarY(
-        vector,
-        gamma
-    );
+    return normalizarVector({
+        x:
+            anterior.x +
+            (nuevo.x - anterior.x) * factor,
 
-    resultado = rotarX(
-        resultado,
-        beta
-    );
+        y:
+            anterior.y +
+            (nuevo.y - anterior.y) * factor,
 
-    resultado = rotarZ(
-        resultado,
-        alpha
-    );
-
-    return resultado;
+        z:
+            anterior.z +
+            (nuevo.z - anterior.z) * factor
+    });
 }
 
 // ============================================================
@@ -262,34 +380,130 @@ export function actualizarOrientacion(
         return false;
     }
 
-    const orientacion =
+    const nueva =
         calcularOrientacion(
             alpha,
             beta,
             gamma
         );
 
+    /*
+     * Suavizado moderado.
+     *
+     * No queremos que el cielo tiemble,
+     * pero tampoco introducir demasiado retraso.
+     */
+
+    const factor =
+        absoluta ? 0.18 : 0.12;
+
+    if (!orientacionSuavizada) {
+        orientacionSuavizada = {
+            haciaDondeMiro:
+                nueva.haciaDondeMiro,
+
+            derecha:
+                nueva.derecha,
+
+            arriba:
+                nueva.arriba
+        };
+    } else {
+        orientacionSuavizada = {
+            haciaDondeMiro:
+                suavizarVector(
+                    orientacionSuavizada.haciaDondeMiro,
+                    nueva.haciaDondeMiro,
+                    factor
+                ),
+
+            derecha:
+                suavizarVector(
+                    orientacionSuavizada.derecha,
+                    nueva.derecha,
+                    factor
+                ),
+
+            arriba:
+                suavizarVector(
+                    orientacionSuavizada.arriba,
+                    nueva.arriba,
+                    factor
+                )
+        };
+    }
+
+    /*
+     * Reconstruimos la base para que los tres
+     * vectores permanezcan ortogonales.
+     */
+
+    const haciaDondeMiro =
+        normalizarVector(
+            orientacionSuavizada.haciaDondeMiro
+        );
+
+    let derecha =
+        normalizarVector(
+            productoCruz(
+                haciaDondeMiro,
+                orientacionSuavizada.arriba
+            )
+        );
+
+    /*
+     * Evitar una base degenerada.
+     */
+
+    if (
+        Math.hypot(
+            derecha.x,
+            derecha.y,
+            derecha.z
+        ) < 0.001
+    ) {
+        derecha =
+            normalizarVector(
+                productoCruz(
+                    haciaDondeMiro,
+                    {
+                        x: 0,
+                        y: 0,
+                        z: 1
+                    }
+                )
+            );
+    }
+
+    const arriba =
+        normalizarVector(
+            productoCruz(
+                derecha,
+                haciaDondeMiro
+            )
+        );
+
+    orientacionSuavizada = {
+        haciaDondeMiro,
+        derecha,
+        arriba
+    };
+
     estado.orientacion = {
-        haciaDondeMiro:
-            orientacion.haciaDondeMiro,
-
-        derecha:
-            orientacion.derecha,
-
-        arriba:
-            orientacion.arriba,
+        haciaDondeMiro,
+        derecha,
+        arriba,
 
         disponible: true,
-
         absoluta
     };
 
-    // ========================================================
+    // --------------------------------------------------------
     // DIRECCIÓN
-    // ========================================================
+    // --------------------------------------------------------
 
     const vector =
-        orientacion.haciaDondeMiro;
+        haciaDondeMiro;
 
     let azimut =
         grados(
@@ -302,9 +516,9 @@ export function actualizarOrientacion(
     azimut =
         (azimut + 360) % 360;
 
-    // ========================================================
+    // --------------------------------------------------------
     // ALTURA
-    // ========================================================
+    // --------------------------------------------------------
 
     const altura =
         grados(
@@ -321,6 +535,12 @@ export function actualizarOrientacion(
 
     estado.direccion = azimut;
     estado.altura = altura;
+
+    /*
+     * Beta solamente como información/debug.
+     * Ya no se utiliza para posicionar el cielo.
+     */
+
     estado.inclinacion = beta;
 
     return true;
@@ -331,6 +551,8 @@ export function actualizarOrientacion(
 // ============================================================
 
 export function reiniciarOrientacion() {
+    orientacionSuavizada = null;
+
     estado.orientacion = {
         haciaDondeMiro: {
             x: 0,

@@ -44,8 +44,7 @@ export const estado = {
     ultimaBeta: null,
     ultimaGamma: null,
 
-    // Compatibilidad con el resto de la aplicación
-    ultimaBeta: null,
+    // Compatibilidad
     referenciaBeta: null,
 
     sensoresEncendidos: false,
