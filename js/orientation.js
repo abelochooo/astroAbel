@@ -1,6 +1,5 @@
 import { estado } from "./state.js";
 
-
 // ============================================================
 // UTILIDADES
 // ============================================================
@@ -14,20 +13,10 @@ function grados(radianes) {
 }
 
 function normalizarVector(v) {
-
-    const longitud =
-        Math.hypot(
-            v.x,
-            v.y,
-            v.z
-        );
+    const longitud = Math.hypot(v.x, v.y, v.z);
 
     if (longitud < 0.000001) {
-        return {
-            x: 0,
-            y: 0,
-            z: 0
-        };
+        return { x: 0, y: 0, z: 0 };
     }
 
     return {
@@ -38,24 +27,14 @@ function normalizarVector(v) {
 }
 
 function productoCruz(a, b) {
-
     return {
-        x:
-            a.y * b.z -
-            a.z * b.y,
-
-        y:
-            a.z * b.x -
-            a.x * b.z,
-
-        z:
-            a.x * b.y -
-            a.y * b.x
+        x: a.y * b.z - a.z * b.y,
+        y: a.z * b.x - a.x * b.z,
+        z: a.x * b.y - a.y * b.x
     };
 }
 
 function productoPunto(a, b) {
-
     return (
         a.x * b.x +
         a.y * b.y +
@@ -63,74 +42,11 @@ function productoPunto(a, b) {
     );
 }
 
-
-// ============================================================
-// ROTACIONES
-// ============================================================
-
-function rotarX(v, angulo) {
-
-    const c = Math.cos(angulo);
-    const s = Math.sin(angulo);
-
-    return {
-        x: v.x,
-
-        y:
-            v.y * c -
-            v.z * s,
-
-        z:
-            v.y * s +
-            v.z * c
-    };
-}
-
-
-function rotarY(v, angulo) {
-
-    const c = Math.cos(angulo);
-    const s = Math.sin(angulo);
-
-    return {
-        x:
-            v.x * c +
-            v.z * s,
-
-        y: v.y,
-
-        z:
-            -v.x * s +
-            v.z * c
-    };
-}
-
-
-function rotarZ(v, angulo) {
-
-    const c = Math.cos(angulo);
-    const s = Math.sin(angulo);
-
-    return {
-        x:
-            v.x * c -
-            v.y * s,
-
-        y:
-            v.x * s +
-            v.y * c,
-
-        z: v.z
-    };
-}
-
-
 // ============================================================
 // PANTALLA
 // ============================================================
 
 function obtenerAnguloPantalla() {
-
     if (
         screen.orientation &&
         typeof screen.orientation.angle === "number"
@@ -138,215 +54,163 @@ function obtenerAnguloPantalla() {
         return screen.orientation.angle;
     }
 
-    if (
-        typeof window.orientation === "number"
-    ) {
+    if (typeof window.orientation === "number") {
         return window.orientation;
     }
 
     return 0;
 }
 
-
 // ============================================================
-// DEVICE ORIENTATION
+// ORIENTACIÓN IPHONE
 //
-// Sistema terrestre:
-//
+// Sistema mundo:
 // X = Este
 // Y = Norte
 // Z = Arriba
 //
-// Sistema del teléfono:
+// Cámara trasera:
+// mira hacia fuera de la pantalla.
 //
-// X = derecha
-// Y = arriba
-// Z = hacia fuera de la pantalla
+// En iPhone usamos:
+// heading = norte magnético/geográfico proporcionado
+// por webkitCompassHeading.
 //
-// La cámara trasera mira hacia -Z.
+// beta  = inclinación delante/detrás
+// gamma = inclinación izquierda/derecha
 // ============================================================
 
-function transformarVector(
-    vector,
-    alpha,
-    beta,
-    gamma
-) {
-
-    // DeviceOrientation:
-    //
-    // gamma -> Y''
-    // beta  -> X'
-    // alpha -> Z
-
-    let resultado =
-        rotarY(
-            vector,
-            gamma
-        );
-
-    resultado =
-        rotarX(
-            resultado,
-            beta
-        );
-
-    resultado =
-        rotarZ(
-            resultado,
-            alpha
-        );
-
-    return resultado;
-}
-
-
-// ============================================================
-// CALCULAR ORIENTACIÓN 3D
-// ============================================================
-
-export function calcularOrientacion(
-    alphaGrados,
+function crearOrientacionDesdeSensores(
+    headingGrados,
     betaGrados,
     gammaGrados
 ) {
-
-    const alpha =
-        radianes(alphaGrados);
-
-    const beta =
-        radianes(betaGrados);
-
-    const gamma =
-        radianes(gammaGrados);
-
-
-    const orientacionPantalla =
-        radianes(
-            obtenerAnguloPantalla()
-        );
-
+    const heading = radianes(headingGrados);
+    const beta = radianes(betaGrados);
+    const gamma = radianes(gammaGrados);
 
     // --------------------------------------------------------
-    // DIRECCIÓN DE LA CÁMARA
+    // Dirección horizontal hacia la que apunta el teléfono.
     //
-    // La cámara trasera mira hacia fuera de la pantalla.
+    // heading:
+    //   0   = Norte
+    //   90  = Este
+    //   180 = Sur
+    //   270 = Oeste
     // --------------------------------------------------------
 
-    const camaraLocal = {
-        x: 0,
-        y: 0,
-        z: -1
-    };
-
-
-    let haciaDondeMiro =
-        transformarVector(
-            camaraLocal,
-            alpha,
-            beta,
-            gamma
-        );
-
-
-    // --------------------------------------------------------
-    // ARRIBA DE LA PANTALLA
-    // --------------------------------------------------------
-
-    let arribaLocal = {
-        x: 0,
-        y: 1,
+    let haciaDondeMiro = {
+        x: Math.sin(heading),
+        y: Math.cos(heading),
         z: 0
     };
 
-
     // --------------------------------------------------------
-    // DERECHA DE LA PANTALLA
-    // --------------------------------------------------------
-
-    let derechaLocal = {
-        x: 1,
-        y: 0,
-        z: 0
-    };
-
-
-    // --------------------------------------------------------
-    // CORREGIR ORIENTACIÓN DE PANTALLA
+    // Inclinación vertical.
+    //
+    // beta/gamma producen la inclinación de la cámara.
+    //
+    // No usamos alpha aquí.
     // --------------------------------------------------------
 
-    arribaLocal =
-        rotarZ(
-            arribaLocal,
-            -orientacionPantalla
-        );
+    const inclinacion =
+        radianes(90 - Math.abs(beta));
 
-    derechaLocal =
-        rotarZ(
-            derechaLocal,
-            -orientacionPantalla
-        );
-
-
-    let derecha =
-        transformarVector(
-            derechaLocal,
-            alpha,
-            beta,
-            gamma
-        );
-
-    let arriba =
-        transformarVector(
-            arribaLocal,
-            alpha,
-            beta,
-            gamma
-        );
-
+    haciaDondeMiro.z =
+        Math.sin(inclinacion);
 
     // --------------------------------------------------------
-    // NORMALIZAR
+    // Reconstruimos la componente horizontal.
     // --------------------------------------------------------
+
+    const horizontal =
+        Math.cos(inclinacion);
+
+    haciaDondeMiro.x *= horizontal;
+    haciaDondeMiro.y *= horizontal;
 
     haciaDondeMiro =
-        normalizarVector(
+        normalizarVector(haciaDondeMiro);
+
+    // --------------------------------------------------------
+    // Eje derecha.
+    //
+    // Cruz entre dirección y vertical terrestre.
+    // --------------------------------------------------------
+
+    const norteArriba = {
+        x: 0,
+        y: 0,
+        z: 1
+    };
+
+    let derecha =
+        productoCruz(
+            haciaDondeMiro,
+            norteArriba
+        );
+
+    derecha =
+        normalizarVector(derecha);
+
+    // --------------------------------------------------------
+    // Eje arriba de la pantalla.
+    // --------------------------------------------------------
+
+    let arriba =
+        productoCruz(
+            derecha,
             haciaDondeMiro
         );
 
-    derecha =
-        normalizarVector(
-            derecha
-        );
-
     arriba =
-        normalizarVector(
-            arriba
-        );
-
+        normalizarVector(arriba);
 
     // --------------------------------------------------------
-    // ORTOGONALIZACIÓN
-    //
-    // Evita errores acumulados de los sensores.
+    // Corrección de orientación física de pantalla.
     // --------------------------------------------------------
 
-    derecha =
-        normalizarVector(
-            productoCruz(
-                haciaDondeMiro,
-                arriba
-            )
-        );
+    const pantalla =
+        obtenerAnguloPantalla();
 
-    arriba =
-        normalizarVector(
-            productoCruz(
-                derecha,
-                haciaDondeMiro
-            )
-        );
+    if (Math.abs(pantalla) > 0.001) {
+        const angulo =
+            radianes(-pantalla);
 
+        const c = Math.cos(angulo);
+        const s = Math.sin(angulo);
+
+        const derechaOriginal = { ...derecha };
+        const arribaOriginal = { ...arriba };
+
+        derecha = {
+            x:
+                derechaOriginal.x * c -
+                arribaOriginal.x * s,
+
+            y:
+                derechaOriginal.y * c -
+                arribaOriginal.y * s,
+
+            z:
+                derechaOriginal.z * c -
+                arribaOriginal.z * s
+        };
+
+        arriba = {
+            x:
+                derechaOriginal.x * s +
+                arribaOriginal.x * c,
+
+            y:
+                derechaOriginal.y * s +
+                arribaOriginal.y * c,
+
+            z:
+                derechaOriginal.z * s +
+                arribaOriginal.z * c
+        };
+    }
 
     return {
         haciaDondeMiro,
@@ -355,173 +219,32 @@ export function calcularOrientacion(
     };
 }
 
-
-// ============================================================
-// FILTRO
-//
-// El navegador ya suele entregar una orientación fusionada.
-// Un filtro demasiado fuerte provoca que las estrellas
-// parezcan moverse detrás del teléfono.
-//
-// 0.80 = respuesta rápida.
-// ============================================================
-
-let orientacionAnterior = null;
-
-const FACTOR_SUAVIZADO = 0.80;
-
-
-function interpolarVector(
-    anterior,
-    nuevo,
-    factor
-) {
-
-    return normalizarVector({
-
-        x:
-            anterior.x +
-            (
-                nuevo.x -
-                anterior.x
-            ) * factor,
-
-        y:
-            anterior.y +
-            (
-                nuevo.y -
-                anterior.y
-            ) * factor,
-
-        z:
-            anterior.z +
-            (
-                nuevo.z -
-                anterior.z
-            ) * factor
-    });
-}
-
-
-function suavizarOrientacion(
-    nueva
-) {
-
-    if (
-        !orientacionAnterior
-    ) {
-
-        orientacionAnterior = {
-            haciaDondeMiro: {
-                ...nueva.haciaDondeMiro
-            },
-
-            derecha: {
-                ...nueva.derecha
-            },
-
-            arriba: {
-                ...nueva.arriba
-            }
-        };
-
-        return orientacionAnterior;
-    }
-
-
-    const haciaDondeMiro =
-        interpolarVector(
-            orientacionAnterior.haciaDondeMiro,
-            nueva.haciaDondeMiro,
-            FACTOR_SUAVIZADO
-        );
-
-
-    let derecha =
-        interpolarVector(
-            orientacionAnterior.derecha,
-            nueva.derecha,
-            FACTOR_SUAVIZADO
-        );
-
-
-    let arriba =
-        interpolarVector(
-            orientacionAnterior.arriba,
-            nueva.arriba,
-            FACTOR_SUAVIZADO
-        );
-
-
-    // --------------------------------------------------------
-    // Volver a construir una base perfectamente ortogonal.
-    // --------------------------------------------------------
-
-    derecha =
-        normalizarVector(
-            productoCruz(
-                haciaDondeMiro,
-                arriba
-            )
-        );
-
-
-    arriba =
-        normalizarVector(
-            productoCruz(
-                derecha,
-                haciaDondeMiro
-            )
-        );
-
-
-    orientacionAnterior = {
-        haciaDondeMiro,
-        derecha,
-        arriba
-    };
-
-
-    return orientacionAnterior;
-}
-
-
 // ============================================================
 // ACTUALIZAR ESTADO
 // ============================================================
 
 export function actualizarOrientacion(
-    alpha,
+    heading,
     beta,
     gamma,
     absoluta = false
 ) {
-
     if (
-        !Number.isFinite(alpha) ||
+        !Number.isFinite(heading) ||
         !Number.isFinite(beta) ||
         !Number.isFinite(gamma)
     ) {
         return false;
     }
 
-
-    const nuevaOrientacion =
-        calcularOrientacion(
-            alpha,
+    const orientacion =
+        crearOrientacionDesdeSensores(
+            heading,
             beta,
             gamma
         );
 
-
-    const orientacion =
-        suavizarOrientacion(
-            nuevaOrientacion
-        );
-
-
     estado.orientacion = {
-
         haciaDondeMiro:
             orientacion.haciaDondeMiro,
 
@@ -532,18 +255,11 @@ export function actualizarOrientacion(
             orientacion.arriba,
 
         disponible: true,
-
         absoluta
     };
 
-
-    // --------------------------------------------------------
-    // Mantener estos valores para el resto de la aplicación.
-    // --------------------------------------------------------
-
     const vector =
         orientacion.haciaDondeMiro;
-
 
     let azimut =
         grados(
@@ -553,13 +269,8 @@ export function actualizarOrientacion(
             )
         );
 
-
     azimut =
-        (
-            azimut +
-            360
-        ) % 360;
-
+        (azimut + 360) % 360;
 
     const altura =
         grados(
@@ -574,32 +285,19 @@ export function actualizarOrientacion(
             )
         );
 
-
-    estado.direccion =
-        azimut;
-
-    estado.altura =
-        altura;
-
-    estado.inclinacion =
-        beta;
-
+    estado.direccion = azimut;
+    estado.altura = altura;
+    estado.inclinacion = beta;
 
     return true;
 }
-
 
 // ============================================================
 // REINICIAR
 // ============================================================
 
 export function reiniciarOrientacion() {
-
-    orientacionAnterior = null;
-
-
     estado.orientacion = {
-
         haciaDondeMiro: {
             x: 0,
             y: 1,
@@ -619,7 +317,6 @@ export function reiniciarOrientacion() {
         },
 
         disponible: false,
-
         absoluta: false
     };
 }

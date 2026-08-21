@@ -246,10 +246,14 @@ function manejarOrientacion(
     }
 
 
-    procesarEvento(
-        evento,
-        Boolean(evento.absolute)
-    );
+    const tieneBrújula =
+    typeof evento.webkitCompassHeading === "number" &&
+    Number.isFinite(evento.webkitCompassHeading);
+
+procesarEvento(
+    evento,
+    Boolean(evento.absolute) || tieneBrújula
+);
 }
 
 
@@ -269,13 +273,56 @@ function procesarEvento(
         return;
     }
 
-    let alpha = Number(evento.alpha);
+    let heading = null;
 
-    const beta =
-        Number(evento.beta);
+const beta =
+    Number(evento.beta);
 
-    const gamma =
-        Number(evento.gamma);
+const gamma =
+    Number(evento.gamma);
+
+// ========================================================
+// RUMBO EN IPHONE
+// ========================================================
+//
+// webkitCompassHeading:
+//   0   = Norte
+//   90  = Este
+//   180 = Sur
+//   270 = Oeste
+//
+// No lo convertimos a alpha.
+// Lo pasamos directamente a orientation.js.
+// ========================================================
+
+if (
+    typeof evento.webkitCompassHeading === "number" &&
+    Number.isFinite(evento.webkitCompassHeading)
+) {
+    heading =
+        normalizar(
+            evento.webkitCompassHeading
+        );
+}
+
+// ========================================================
+// FALLBACK
+// ========================================================
+//
+// Si el navegador no proporciona brújula,
+// utilizamos alpha.
+// ========================================================
+
+if (heading === null) {
+    if (!Number.isFinite(Number(evento.alpha))) {
+        return;
+    }
+
+    heading =
+        normalizar(
+            Number(evento.alpha)
+        );
+}
 
 
     // ========================================================
@@ -311,19 +358,18 @@ function procesarEvento(
 
 
     if (
-        !actualizarOrientacion(
-            alpha,
-            beta,
-            gamma,
-            absoluta
-        )
-    ) {
-        return;
-    }
+    !actualizarOrientacion(
+        heading,
+        beta,
+        gamma,
+        absoluta
+    )
+) {
+    return;
+}
 
-
-    estado.ultimaAlpha =
-        alpha;
+estado.ultimaAlpha =
+    heading;
 
     estado.ultimaBeta =
         beta;
