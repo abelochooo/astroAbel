@@ -42,12 +42,34 @@ function productoCruz(a, b) {
     };
 }
 
+function mezclarVector(anterior, nuevo, factor) {
+    if (anterior === null) {
+        return nuevo;
+    }
+
+    return normalizarVector({
+        x: anterior.x + (nuevo.x - anterior.x) * factor,
+        y: anterior.y + (nuevo.y - anterior.y) * factor,
+        z: anterior.z + (nuevo.z - anterior.z) * factor
+    });
+}
+
 // ============================================================
 // ESTADO INTERNO DEL FILTRO
 // ============================================================
 
 let azimutSuavizado = null;
 let alturaSuavizada = null;
+
+/*
+ * Estos guardan el "derecha"/"arriba" del frame anterior
+ * para poder suavizarlos. Cerca del cenit/nadir el azimut
+ * pierde sentido geométricamente (gimbal lock) y cualquier
+ * ruido del sensor se amplifica mucho al normalizar un
+ * vector casi nulo. Suavizar aquí evita ese temblor/salto.
+ */
+let derechaSuavizada = null;
+let arribaSuavizada = null;
 
 // ============================================================
 // ÁNGULO CIRCULAR
@@ -237,7 +259,9 @@ export function actualizarOrientacion(
     if (
         estado.aceleracionLineal > umbralCongelar &&
         azimutSuavizado !== null &&
-        alturaSuavizada !== null
+        alturaSuavizada !== null &&
+        derechaSuavizada !== null &&
+        arribaSuavizada !== null
     ) {
         const orientacionCongelada =
             calcularOrientacion(
@@ -250,10 +274,10 @@ export function actualizarOrientacion(
                 orientacionCongelada.haciaDondeMiro,
 
             derecha:
-                orientacionCongelada.derecha,
+                derechaSuavizada,
 
             arriba:
-                orientacionCongelada.arriba,
+                arribaSuavizada,
 
             disponible: true,
 
@@ -309,15 +333,49 @@ export function actualizarOrientacion(
             alturaSuavizada
         );
 
+    /*
+     * Cuanto más cerca del cenit/nadir, más agresivo
+     * el suavizado de "derecha"/"arriba" (el giro/roll
+     * de la escena). A 90° de distancia del polo (en el
+     * horizonte) confiamos al 100% en el valor nuevo; a
+     * menos de 15° del polo casi lo congelamos.
+     */
+
+    const distanciaAlPolo =
+        90 - Math.abs(alturaSuavizada);
+
+    const factorRoll =
+        Math.max(
+            0.04,
+            Math.min(
+                1,
+                distanciaAlPolo / 15
+            )
+        );
+
+    derechaSuavizada =
+        mezclarVector(
+            derechaSuavizada,
+            orientacion.derecha,
+            factorRoll
+        );
+
+    arribaSuavizada =
+        mezclarVector(
+            arribaSuavizada,
+            orientacion.arriba,
+            factorRoll
+        );
+
     estado.orientacion = {
         haciaDondeMiro:
             orientacion.haciaDondeMiro,
 
         derecha:
-            orientacion.derecha,
+            derechaSuavizada,
 
         arriba:
-            orientacion.arriba,
+            arribaSuavizada,
 
         disponible: true,
 
@@ -347,6 +405,8 @@ export function actualizarOrientacion(
 export function reiniciarOrientacion() {
     azimutSuavizado = null;
     alturaSuavizada = null;
+    derechaSuavizada = null;
+    arribaSuavizada = null;
 
     estado.orientacion = {
         haciaDondeMiro: {
