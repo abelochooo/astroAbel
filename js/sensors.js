@@ -22,10 +22,6 @@ const alturaTexto =
 const debug =
     document.getElementById("debug");
 
-let ultimoEventoAbsoluto = 0;
-
-let usandoEventoAbsoluto = false;
-
 let ultimoEvento = 0;
 
 // ============================================================
@@ -45,11 +41,6 @@ export async function solicitarPermisoSensores() {
         "function"
     ) {
         try {
-            /*
-             * En iOS el permiso se solicita al pulsar
-             * el botón de sensores.
-             */
-
             const permiso =
                 await DeviceOrientationEvent
                     .requestPermission();
@@ -75,22 +66,7 @@ export function activarSensores() {
 
     estado.sensoresEncendidos = true;
 
-    usandoEventoAbsoluto = false;
-
-    ultimoEventoAbsoluto = 0;
-
     ultimoEvento = 0;
-
-    /*
-     * IMPORTANTE:
-     *
-     * En iPhone utilizamos principalmente
-     * deviceorientation.
-     *
-     * Safari proporciona webkitCompassHeading
-     * ahí, que es mucho más útil para AR que
-     * intentar mezclar dos referencias.
-     */
 
     window.addEventListener(
         "deviceorientation",
@@ -99,96 +75,45 @@ export function activarSensores() {
     );
 
     /*
-     * También escuchamos orientationabsolute,
-     * pero solamente si realmente aparece.
+     * NO utilizamos deviceorientationabsolute.
      *
-     * Si aparece de forma válida, dejamos que
-     * ese sistema tome prioridad.
+     * En iPhone/Safari queremos un único flujo:
+     *
+     * deviceorientation
+     *       +
+     * webkitCompassHeading
      */
 
-    window.addEventListener(
-        "deviceorientationabsolute",
-        manejarOrientacionAbsoluta,
-        true
-    );
-
-    const cambiarPantalla = () => {
+    const actualizarTrasRotacionPantalla = () => {
         if (
             estado.ultimaAlpha !== null &&
             estado.ultimaBeta !== null &&
             estado.ultimaGamma !== null
         ) {
-            actualizarOrientacion(
+            manejarValores(
                 estado.ultimaAlpha,
                 estado.ultimaBeta,
                 estado.ultimaGamma,
-                estado.orientacion.absoluta
+                estado.ultimaHeading
             );
-
-            actualizarInterfaz();
-
-            actualizarPantalla();
         }
     };
 
-    if (
-        screen.orientation
-    ) {
+    if (screen.orientation) {
         screen.orientation.addEventListener(
             "change",
-            cambiarPantalla
+            actualizarTrasRotacionPantalla
         );
     } else {
         window.addEventListener(
             "orientationchange",
-            cambiarPantalla
+            actualizarTrasRotacionPantalla
         );
     }
 }
 
 // ============================================================
-// ORIENTACIÓN ABSOLUTA
-// ============================================================
-
-function manejarOrientacionAbsoluta(evento) {
-    if (
-        estado.modo !== "ar"
-    ) {
-        return;
-    }
-
-    if (
-        evento.alpha === null ||
-        evento.beta === null ||
-        evento.gamma === null
-    ) {
-        return;
-    }
-
-    /*
-     * Solo aceptamos este sistema si el navegador
-     * realmente indica que es absoluto.
-     */
-
-    if (
-        evento.absolute !== true
-    ) {
-        return;
-    }
-
-    usandoEventoAbsoluto = true;
-
-    ultimoEventoAbsoluto =
-        performance.now();
-
-    procesarEvento(
-        evento,
-        true
-    );
-}
-
-// ============================================================
-// ORIENTACIÓN NORMAL
+// EVENTO DEVICEORIENTATION
 // ============================================================
 
 function manejarOrientacion(evento) {
@@ -198,159 +123,182 @@ function manejarOrientacion(evento) {
         return;
     }
 
-    /*
-     * Si tenemos un flujo absoluto válido,
-     * no mezclamos ambos sistemas.
-     */
-
     if (
-        usandoEventoAbsoluto &&
-        performance.now() -
-            ultimoEventoAbsoluto <
-            3000
-    ) {
-        return;
-    }
-
-    if (
-        evento.alpha === null ||
         evento.beta === null ||
         evento.gamma === null
     ) {
         return;
     }
 
-    /*
-     * Si el navegador empieza a proporcionar
-     * orientación absoluta, dejamos de usar
-     * el flujo normal.
-     */
+    const heading =
+        obtenerHeading(evento);
 
     if (
-        evento.absolute === true
+        heading === null
     ) {
-        usandoEventoAbsoluto = true;
-
-        procesarEvento(
-            evento,
-            true
-        );
-
         return;
     }
 
-    procesarEvento(
-        evento,
-        false
+    manejarValores(
+        evento.alpha,
+        evento.beta,
+        evento.gamma,
+        heading
     );
 }
 
 // ============================================================
-// PROCESAR SENSOR
+// OBTENER RUMBO
 // ============================================================
 
-function procesarEvento(
-    evento,
-    absoluta
-) {
-    const ahora =
-        performance.now();
-
+function obtenerHeading(evento) {
     /*
-     * Evitar eventos excesivamente rápidos.
+     * Safari / iPhone
+     *
+     * Esta es la referencia magnética/geográfica
+     * que queremos utilizar para el azimut.
      */
 
     if (
-        ahora - ultimoEvento < 8
-    ) {
-        return;
-    }
-
-    ultimoEvento = ahora;
-
-    if (
-        evento.alpha === null ||
-        evento.beta === null ||
-        evento.gamma === null
-    ) {
-        return;
-    }
-
-    let alpha =
-        Number(evento.alpha);
-
-    const beta =
-        Number(evento.beta);
-
-    const gamma =
-        Number(evento.gamma);
-
-    if (
-        !Number.isFinite(alpha) ||
-        !Number.isFinite(beta) ||
-        !Number.isFinite(gamma)
-    ) {
-        return;
-    }
-
-    /*
-     * --------------------------------------------------------
-     * IPHONE / SAFARI
-     * --------------------------------------------------------
-     *
-     * webkitCompassHeading representa la dirección
-     * de la cámara respecto al norte.
-     *
-     * No la usamos cuando tenemos una orientación
-     * absoluta real.
-     */
-
-    if (
-        !absoluta &&
         typeof evento.webkitCompassHeading ===
             "number" &&
         Number.isFinite(
             evento.webkitCompassHeading
         )
     ) {
-        const heading =
-            normalizar(
-                evento.webkitCompassHeading
-            );
-
-        /*
-         * La conversión es:
-         *
-         * heading 0° = Norte
-         *
-         * DeviceOrientation alpha utiliza
-         * la convención inversa para este caso.
-         */
-
-        alpha =
-            normalizar(
-                360 - heading
-            );
+        return normalizar(
+            evento.webkitCompassHeading
+        );
     }
+
+    /*
+     * Fallback para navegadores que no tienen
+     * webkitCompassHeading.
+     *
+     * En ese caso alpha es nuestra mejor
+     * aproximación.
+     */
+
+    if (
+        typeof evento.alpha === "number" &&
+        Number.isFinite(evento.alpha)
+    ) {
+        return normalizar(
+            360 - evento.alpha
+        );
+    }
+
+    return null;
+}
+
+// ============================================================
+// PROCESAR VALORES
+// ============================================================
+
+function manejarValores(
+    alpha,
+    beta,
+    gamma,
+    heading
+) {
+    const ahora =
+        performance.now();
+
+    /*
+     * Evitar una frecuencia exagerada.
+     */
+
+    if (
+        ahora - ultimoEvento < 12
+    ) {
+        return;
+    }
+
+    ultimoEvento = ahora;
+
+    /*
+     * --------------------------------------------------------
+     * ALTURA DE LA CÁMARA
+     * --------------------------------------------------------
+     *
+     * beta:
+     *
+     * 0°  = teléfono aproximadamente horizontal
+     * 90° = teléfono vertical
+     *
+     * Para la cámara trasera:
+     *
+     * beta - 90
+     *
+     * da una aproximación directa de cuánto
+     * estamos apuntando hacia arriba.
+     *
+     * --------------------------------------------------------
+     */
+
+    let altura =
+        Number(beta) - 90;
+
+    /*
+     * gamma aparece principalmente al girar
+     * el teléfono lateralmente.
+     *
+     * No lo utilizamos para cambiar el azimut.
+     *
+     * Eso evita el salto Este/Oeste que tenías.
+     */
+
+    if (
+        !Number.isFinite(altura)
+    ) {
+        return;
+    }
+
+    altura =
+        Math.max(
+            -90,
+            Math.min(
+                90,
+                altura
+            )
+        );
 
     if (
         !actualizarOrientacion(
-            alpha,
-            beta,
-            gamma,
-            absoluta
+            heading,
+            altura,
+            Number(gamma) || 0,
+            false
         )
     ) {
         return;
     }
 
-    estado.ultimaAlpha = alpha;
-    estado.ultimaBeta = beta;
-    estado.ultimaGamma = gamma;
+    estado.ultimaAlpha =
+        Number.isFinite(alpha)
+            ? Number(alpha)
+            : null;
+
+    estado.ultimaBeta =
+        Number(beta);
+
+    estado.ultimaGamma =
+        Number(gamma);
+
+    /*
+     * Guardamos el heading real para que
+     * orientationchange pueda recalcular.
+     */
+
+    estado.ultimaHeading =
+        heading;
 
     actualizarInterfaz(
-        evento,
-        absoluta
+        heading,
+        altura,
+        alpha,
+        beta,
+        gamma
     );
 
     actualizarPantalla();
@@ -361,9 +309,11 @@ function procesarEvento(
 // ============================================================
 
 function actualizarInterfaz(
-    evento = null,
-    absoluta =
-        estado.orientacion.absoluta
+    heading,
+    altura,
+    alpha,
+    beta,
+    gamma
 ) {
     direccionTexto.textContent =
         `${estado.direccion.toFixed(1)}°`;
@@ -371,32 +321,12 @@ function actualizarInterfaz(
     alturaTexto.textContent =
         `${estado.altura.toFixed(1)}°`;
 
-    let texto =
+    debug.textContent =
         `Dir: ${estado.direccion.toFixed(1)}° ` +
-        `Alt: ${estado.altura.toFixed(1)}°`;
-
-    if (evento) {
-        texto +=
-            ` | α:${Math.round(
-                evento.alpha ?? 0
-            )}` +
-
-            ` β:${Math.round(
-                evento.beta ?? 0
-            )}` +
-
-            ` γ:${Math.round(
-                evento.gamma ?? 0
-            )}` +
-
-            ` | ${
-                absoluta
-                    ? "ABS"
-                    : "IPHONE"
-            }`;
-    }
-
-    debug.textContent = texto;
+        `Alt: ${estado.altura.toFixed(1)}° ` +
+        `| H:${Math.round(heading)} ` +
+        `β:${Math.round(beta ?? 0)} ` +
+        `γ:${Math.round(gamma ?? 0)}`;
 }
 
 // ============================================================
@@ -404,31 +334,14 @@ function actualizarInterfaz(
 // ============================================================
 
 export function calibrarSensores() {
-    /*
-     * IMPORTANTE:
-     *
-     * Calibrar NO debe cambiar la referencia
-     * astronómica.
-     *
-     * Simplemente reiniciamos el filtro.
-     */
-
     reiniciarOrientacion();
 
-    if (
-        estado.ultimaAlpha !== null &&
-        estado.ultimaBeta !== null &&
-        estado.ultimaGamma !== null
-    ) {
-        actualizarOrientacion(
-            estado.ultimaAlpha,
-            estado.ultimaBeta,
-            estado.ultimaGamma,
-            estado.orientacion.absoluta
-        );
-    }
-
-    actualizarInterfaz();
+    /*
+     * No alteramos el norte.
+     *
+     * Al siguiente evento del sensor se reconstruye
+     * la orientación desde el heading real del iPhone.
+     */
 
     actualizarPantalla();
 }
