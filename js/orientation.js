@@ -16,7 +16,11 @@ function normalizarVector(v) {
     const longitud = Math.hypot(v.x, v.y, v.z);
 
     if (longitud < 0.000001) {
-        return { x: 0, y: 0, z: 0 };
+        return {
+            x: 0,
+            y: 0,
+            z: 0
+        };
     }
 
     return {
@@ -34,14 +38,6 @@ function productoCruz(a, b) {
     };
 }
 
-function productoPunto(a, b) {
-    return (
-        a.x * b.x +
-        a.y * b.y +
-        a.z * b.z
-    );
-}
-
 // ============================================================
 // PANTALLA
 // ============================================================
@@ -54,7 +50,9 @@ function obtenerAnguloPantalla() {
         return screen.orientation.angle;
     }
 
-    if (typeof window.orientation === "number") {
+    if (
+        typeof window.orientation === "number"
+    ) {
         return window.orientation;
     }
 
@@ -62,126 +60,198 @@ function obtenerAnguloPantalla() {
 }
 
 // ============================================================
-// ORIENTACIÓN IPHONE
+// ROTACIÓN DEVICE ORIENTATION
 //
-// Sistema mundo:
+// DeviceOrientation:
+//
+// alpha -> Z
+// beta  -> X'
+// gamma -> Y''
+//
+// La especificación define:
+//
+// R = Rz(alpha) * Rx(beta) * Ry(gamma)
+//
+// En iPhone NO usamos alpha para el rumbo.
+// Convertimos:
+//
+// alpha = -webkitCompassHeading
+//
+// porque alpha aumenta en sentido contrario
+// al heading de brújula.
+//
+// Mundo:
+//
 // X = Este
 // Y = Norte
 // Z = Arriba
 //
-// Cámara trasera:
-// mira hacia fuera de la pantalla.
+// Teléfono:
 //
-// En iPhone usamos:
-// heading = norte magnético/geográfico proporcionado
-// por webkitCompassHeading.
+// X = derecha
+// Y = arriba
+// Z = fuera de pantalla
 //
-// beta  = inclinación delante/detrás
-// gamma = inclinación izquierda/derecha
+// Cámara trasera = -Z
 // ============================================================
 
-function crearOrientacionDesdeSensores(
+function transformarVector(
+    vector,
+    alpha,
+    beta,
+    gamma
+) {
+    const ca = Math.cos(alpha);
+    const sa = Math.sin(alpha);
+
+    const cb = Math.cos(beta);
+    const sb = Math.sin(beta);
+
+    const cg = Math.cos(gamma);
+    const sg = Math.sin(gamma);
+
+    // R = Rz(alpha) * Rx(beta) * Ry(gamma)
+
+    const x =
+        (ca * cg - sa * sb * sg) * vector.x +
+        (-ca * sb * sg - sa * cg) * vector.y +
+        (ca * sg - sa * sb * cg) * vector.z;
+
+    const y =
+        (sa * cg + ca * sb * sg) * vector.x +
+        (-sa * sb * sg + ca * cg) * vector.y +
+        (sa * sg + ca * sb * cg) * vector.z;
+
+    const z =
+        (-cb * sg) * vector.x +
+        (sb) * vector.y +
+        (cb * cg) * vector.z;
+
+    return {
+        x,
+        y,
+        z
+    };
+}
+
+// ============================================================
+// ORIENTACIÓN
+// ============================================================
+
+export function calcularOrientacion(
     headingGrados,
     betaGrados,
     gammaGrados
 ) {
-    const heading = radianes(headingGrados);
-    const beta = radianes(betaGrados);
-    const gamma = radianes(gammaGrados);
+    /*
+     * iPhone:
+     *
+     * heading:
+     *   0   = Norte
+     *   90  = Este
+     *   180 = Sur
+     *   270 = Oeste
+     *
+     * DeviceOrientation alpha tiene el sentido contrario
+     * al heading de brújula.
+     */
+
+    const alpha =
+        radianes(
+            -headingGrados
+        );
+
+    const beta =
+        radianes(
+            betaGrados
+        );
+
+    const gamma =
+        radianes(
+            gammaGrados
+        );
 
     // --------------------------------------------------------
-    // Dirección horizontal hacia la que apunta el teléfono.
+    // CÁMARA TRASERA
     //
-    // heading:
-    //   0   = Norte
-    //   90  = Este
-    //   180 = Sur
-    //   270 = Oeste
+    // La cámara mira hacia fuera de la pantalla = -Z
     // --------------------------------------------------------
 
-    let haciaDondeMiro = {
-        x: Math.sin(heading),
-        y: Math.cos(heading),
-        z: 0
-    };
-
-    // --------------------------------------------------------
-    // Inclinación vertical.
-    //
-    // beta/gamma producen la inclinación de la cámara.
-    //
-    // No usamos alpha aquí.
-    // --------------------------------------------------------
-
-    const inclinacion =
-        radianes(90 - Math.abs(beta));
-
-    haciaDondeMiro.z =
-        Math.sin(inclinacion);
-
-    // --------------------------------------------------------
-    // Reconstruimos la componente horizontal.
-    // --------------------------------------------------------
-
-    const horizontal =
-        Math.cos(inclinacion);
-
-    haciaDondeMiro.x *= horizontal;
-    haciaDondeMiro.y *= horizontal;
-
-    haciaDondeMiro =
-        normalizarVector(haciaDondeMiro);
-
-    // --------------------------------------------------------
-    // Eje derecha.
-    //
-    // Cruz entre dirección y vertical terrestre.
-    // --------------------------------------------------------
-
-    const norteArriba = {
+    const camaraLocal = {
         x: 0,
         y: 0,
-        z: 1
+        z: -1
     };
 
-    let derecha =
-        productoCruz(
-            haciaDondeMiro,
-            norteArriba
+    let haciaDondeMiro =
+        transformarVector(
+            camaraLocal,
+            alpha,
+            beta,
+            gamma
         );
 
-    derecha =
-        normalizarVector(derecha);
+    // --------------------------------------------------------
+    // EJES DE PANTALLA
+    // --------------------------------------------------------
 
-    // --------------------------------------------------------
-    // Eje arriba de la pantalla.
-    // --------------------------------------------------------
+    let derecha =
+        transformarVector(
+            {
+                x: 1,
+                y: 0,
+                z: 0
+            },
+            alpha,
+            beta,
+            gamma
+        );
 
     let arriba =
-        productoCruz(
-            derecha,
-            haciaDondeMiro
+        transformarVector(
+            {
+                x: 0,
+                y: 1,
+                z: 0
+            },
+            alpha,
+            beta,
+            gamma
         );
 
-    arriba =
-        normalizarVector(arriba);
-
     // --------------------------------------------------------
-    // Corrección de orientación física de pantalla.
+    // CORRECCIÓN DE ORIENTACIÓN DE PANTALLA
+    //
+    // Rotamos derecha/arriba alrededor del eje de visión.
+    // La dirección del cielo NO cambia al rotar la interfaz.
     // --------------------------------------------------------
 
-    const pantalla =
-        obtenerAnguloPantalla();
+    const orientacionPantalla =
+        radianes(
+            obtenerAnguloPantalla()
+        );
 
-    if (Math.abs(pantalla) > 0.001) {
-        const angulo =
-            radianes(-pantalla);
+    if (
+        Math.abs(orientacionPantalla) >
+        0.000001
+    ) {
+        const c =
+            Math.cos(
+                orientacionPantalla
+            );
 
-        const c = Math.cos(angulo);
-        const s = Math.sin(angulo);
+        const s =
+            Math.sin(
+                orientacionPantalla
+            );
 
-        const derechaOriginal = { ...derecha };
-        const arribaOriginal = { ...arriba };
+        const derechaOriginal = {
+            ...derecha
+        };
+
+        const arribaOriginal = {
+            ...arriba
+        };
 
         derecha = {
             x:
@@ -212,6 +282,47 @@ function crearOrientacionDesdeSensores(
         };
     }
 
+    // --------------------------------------------------------
+    // NORMALIZACIÓN
+    // --------------------------------------------------------
+
+    haciaDondeMiro =
+        normalizarVector(
+            haciaDondeMiro
+        );
+
+    derecha =
+        normalizarVector(
+            derecha
+        );
+
+    arriba =
+        normalizarVector(
+            arriba
+        );
+
+    // --------------------------------------------------------
+    // ORTOGONALIZAR
+    //
+    // Garantiza que los tres ejes formen una cámara válida.
+    // --------------------------------------------------------
+
+    derecha =
+        normalizarVector(
+            productoCruz(
+                haciaDondeMiro,
+                arriba
+            )
+        );
+
+    arriba =
+        normalizarVector(
+            productoCruz(
+                derecha,
+                haciaDondeMiro
+            )
+        );
+
     return {
         haciaDondeMiro,
         derecha,
@@ -227,7 +338,7 @@ export function actualizarOrientacion(
     heading,
     beta,
     gamma,
-    absoluta = false
+    absoluta = true
 ) {
     if (
         !Number.isFinite(heading) ||
@@ -238,7 +349,7 @@ export function actualizarOrientacion(
     }
 
     const orientacion =
-        crearOrientacionDesdeSensores(
+        calcularOrientacion(
             heading,
             beta,
             gamma
@@ -255,8 +366,13 @@ export function actualizarOrientacion(
             orientacion.arriba,
 
         disponible: true,
+
         absoluta
     };
+
+    // --------------------------------------------------------
+    // DIRECCIÓN
+    // --------------------------------------------------------
 
     const vector =
         orientacion.haciaDondeMiro;
@@ -272,6 +388,10 @@ export function actualizarOrientacion(
     azimut =
         (azimut + 360) % 360;
 
+    // --------------------------------------------------------
+    // ALTURA
+    // --------------------------------------------------------
+
     const altura =
         grados(
             Math.asin(
@@ -285,9 +405,14 @@ export function actualizarOrientacion(
             )
         );
 
-    estado.direccion = azimut;
-    estado.altura = altura;
-    estado.inclinacion = beta;
+    estado.direccion =
+        azimut;
+
+    estado.altura =
+        altura;
+
+    estado.inclinacion =
+        beta;
 
     return true;
 }
