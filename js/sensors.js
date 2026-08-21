@@ -261,46 +261,53 @@ function procesarEvento(
     evento,
     absoluta
 ) {
+    if (
+        evento.alpha === null ||
+        evento.beta === null ||
+        evento.gamma === null
+    ) {
+        return;
+    }
 
-    let alpha =
-        Number(evento.alpha);
-
+    let alpha = Number(evento.alpha);
 
     const beta =
         Number(evento.beta);
-
 
     const gamma =
         Number(evento.gamma);
 
 
-    /*
-     * En Safari existe webkitCompassHeading.
-     *
-     * Es una lectura de brújula que ya expresa
-     * la dirección del teléfono respecto al norte.
-     *
-     * La convertimos al alpha utilizado por
-     * DeviceOrientation:
-     *
-     * alpha = 360 - heading
-     */
+    // ========================================================
+    // IMPORTANTE
+    //
+    // Si tenemos orientación absoluta, NO sustituimos alpha
+    // por webkitCompassHeading.
+    //
+    // deviceorientationabsolute ya proporciona una referencia
+    // absoluta.
+    //
+    // webkitCompassHeading solo se utiliza como fallback en
+    // dispositivos que no proporcionan orientación absoluta.
+    // ========================================================
 
     if (
-    !absoluta &&
-    typeof evento.webkitCompassHeading === "number" &&
-    Number.isFinite(evento.webkitCompassHeading)
-) {
-    const heading =
-        normalizar(
+        !absoluta &&
+        typeof evento.webkitCompassHeading === "number" &&
+        Number.isFinite(
             evento.webkitCompassHeading
-        );
+        )
+    ) {
+        const heading =
+            normalizar(
+                evento.webkitCompassHeading
+            );
 
-    alpha =
-        normalizar(
-            360 - heading
-        );
-}
+        alpha =
+            normalizar(
+                360 - heading
+            );
+    }
 
 
     if (
@@ -329,7 +336,6 @@ function procesarEvento(
         evento,
         absoluta
     );
-
 
     actualizarPantalla();
 }
